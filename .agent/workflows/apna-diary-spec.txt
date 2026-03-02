@@ -1,0 +1,867 @@
+╔══════════════════════════════════════════════════════════════════════════════════╗
+║              Antigravity Build Spec: Apna Diary                                ║
+║              Version 1.0 | Date: March 2, 2026 | Owner: Deepanshu Lohumi       ║
+╚══════════════════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 1 — TITLE & SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Apna Diary is a mobile-first, offline-capable Progressive Web App (PWA) designed
+for a small-scale Indian dairy seller (specifically an elder parent) to record
+daily milk, paneer, and dahi sales for each customer, manage dues and payments,
+generate monthly PDF statements per customer, and (in a later phase) automatically
+send WhatsApp receipts to each customer every night at 10:00 PM IST. The app must
+work on low-end Android phones without internet connectivity, sync to Supabase
+cloud when online, and be entirely free to build and host. It will begin as a
+single-user app and scale to multi-user with Google Auth in the final phase.
+
+App Name:     Apna Diary
+Tagline:      Fresh & Pure Daily 🥛✨
+Country Code: +91 (India)
+Timezone:     Asia/Kolkata (IST, UTC+5:30)
+Language:     English (UI) | English + Hindi emoji/tone (WhatsApp messages)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 2 — PRIMARY PERSONA & KEY UX GOALS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Primary Persona:
+  Name:        "Papaji" (Deepanshu's father, the daily seller)
+  Age:         55–70 years
+  Device:      Low-end to mid-range Android phone (Android 8+)
+  Tech Skills: Basic smartphone use; can tap, scroll, type numbers
+  Daily Goal:  Open app → see customer list → enter today's sales → done
+  Pain Points: Small fonts, too many steps, confusing navigation, no offline use
+
+Secondary Persona (Phase 4+):
+  Multiple dairy sellers across India, each with their own Google account,
+  managing their own customer base through the same platform.
+
+Key UX Goals:
+  1. ZERO learning curve — first screen must be the data entry screen, always
+  2. Maximum 3 taps to record a customer's full daily purchase
+  3. Large, finger-friendly touch targets (minimum 44×44 px)
+  4. Minimum 18sp font everywhere; 22sp for primary data fields
+  5. High contrast color scheme (WCAG AA minimum)
+  6. Clear success/error toasts after every action
+  7. Beautiful, clean dairy-themed visual design that looks professional
+  8. Works perfectly offline — no "no connection" errors during core tasks
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 3 — RECOMMENDED TECH STACK (100% FREE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Layer               | Technology                    | Why / Free Tier
+--------------------|-------------------------------|------------------------------------
+Frontend Framework  | React 18 + Vite               | Fast HMR, small bundle, PWA plugin
+Styling             | TailwindCSS v3                | Easy large spacing/fonts for elders
+PWA Setup           | vite-plugin-pwa + Workbox     | Service worker, manifest, caching
+Offline Storage     | IndexedDB via `idb` library   | Browser-native, large capacity
+Cloud Database      | Supabase (PostgreSQL)         | Free tier: 500MB DB, 1GB storage,
+                    |                               | built-in Auth, Row-Level Security,
+                    |                               | Realtime WebSockets, REST API
+Auth (Phase 4)      | Supabase Auth + Google OAuth  | Free, built-in, no extra service
+State Management    | Zustand                       | Lightweight, no boilerplate
+Routing             | React Router v6               | Standard, well-documented
+PDF Generation      | jsPDF + html2canvas           | Client-side, no server needed
+Date Handling       | date-fns + date-fns-tz        | Accurate IST timezone handling
+Notifications       | Web Push API + Service Worker | Local push on Android PWA
+WhatsApp (Phase 3)  | n8n (self-hosted free OR      | Free automation, webhook triggers,
+                    | n8n.cloud free trial)         | WhatsApp Business API integration
+Hosting             | Vercel (free tier)            | HTTPS auto, 100GB bandwidth/month,
+                    |                               | CI/CD from GitHub
+Icons               | Lucide React                  | Clean, consistent icon set
+Toast Alerts        | react-hot-toast               | Simple, accessible notifications
+CSV Export          | Papa Parse                    | Client-side CSV generation
+
+NOTE ON DATABASE CHOICE:
+Supabase wins over MongoDB for this project because:
+  - Dairy records are highly relational (customers → entries → payments → prices)
+  - Built-in Google Auth is ready for Phase 4 multi-user expansion
+  - Row-Level Security means Phase 4 data isolation between sellers is trivial
+  - Free tier is more generous than MongoDB Atlas free tier
+  - SQL queries are far easier for monthly totals, dues calculations, aggregates
+  - Supabase Storage handles PDF backup files natively
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 4 — DEVELOPMENT PHASES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PHASE 1 (Core — Build First):
+  - PWA setup (manifest, service worker, offline caching)
+  - Customer management (add/edit/delete)
+  - Daily data entry screen (milk, paneer, dahi)
+  - Global & per-customer pricing
+  - Alphabetical sort + "move to end after save" logic
+  - Date navigation (prev/next arrows + date picker)
+  - Auto-save drafts
+  - IndexedDB offline-first storage
+  - Supabase sync when online
+  - Edit logging / audit trail
+  - Basic dues & payment tracking
+
+PHASE 2 (Summary & PDF):
+  - Monthly summary screen with calendar
+  - Customer monthly detail view
+  - Dues / extra-paid calculation
+  - Payment entry (add/edit/delete payments)
+  - PDF generation for single customer monthly statement
+  - CSV export
+  - Local push notifications (daily reminder to seller)
+  - Past dues (carry-forward from previous months)
+
+PHASE 3 (WhatsApp Automation — Second-to-Last):
+  - Seller's WhatsApp number entry in Settings
+  - n8n webhook-triggered WhatsApp message at 22:00 IST daily
+  - 3 message templates (auto-selected by purchase type)
+  - Send only if purchase exists that day
+  - Send correction message on past entry edit
+  - WhatsApp consent displayed on customer add
+  - Retry logic + send log in Supabase
+  - Consent welcome message on first save
+
+PHASE 4 (Multi-User + iOS — Last Phase):
+  - Google Auth login via Supabase Auth
+  - Per-account data isolation (Row-Level Security)
+  - Admin panel (reset day, rollback entries)
+  - iOS PWA support and testing
+  - Multiple sellers / accounts on same platform
+  - Multi-device real-time sync via Supabase Realtime
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 5 — PWA REQUIREMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Web App Manifest (manifest.webmanifest):
+{
+  "name": "Apna Diary",
+  "short_name": "Apna Diary",
+  "description": "Fresh & Pure Daily Dairy Records",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAFFFE",
+  "theme_color": "#2B7FBF",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
+
+Service Worker Strategy (Workbox via vite-plugin-pwa):
+  - App Shell:          CacheFirst (HTML, CSS, JS bundles)
+  - Static Assets:      CacheFirst (icons, fonts, images)
+  - Supabase API calls: NetworkFirst with IndexedDB fallback
+  - Background Sync:    Register sync tag "apna-diary-sync" for pending writes
+  - Offline Fallback:   Serve cached data from IndexedDB when offline
+
+PWA Install Prompt:
+  - Show "Add to Home Screen" banner after 2nd app visit
+  - Custom install button in Settings screen
+  - On install, show onboarding tips screen (3 slides, swipeable)
+
+Minimum OS Support:
+  - Android 8.0+ (API level 26) — covers ~95% of Indian Android market
+  - iOS 16+ (Phase 4 only)
+  - Chrome 90+, Firefox 90+, Samsung Internet 14+
+
+HTTPS: Automatically handled by Vercel deployment.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 6 — BRANDING & DESIGN SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Color Palette:
+  Primary Blue:     #2B7FBF  (calm, trustworthy — header, primary buttons)
+  Primary Light:    #EBF4FB  (light blue — card backgrounds, hover states)
+  Accent Green:     #27AE60  (success states, "Saved" toasts, paid badges)
+  Accent Orange:    #F4A261  (CTAs, "Save Entry" button, highlights)
+  Warning Red:      #E63946  (dues badge, error toasts, delete actions)
+  Background:       #FAFFFE  (near-white with slight cream — easy on elder eyes)
+  Surface White:    #FFFFFF  (cards, modals)
+  Text Primary:     #1A1A2E  (dark navy — main text, high contrast)
+  Text Secondary:   #5A6A7A  (labels, helper text)
+  Border:           #D0E8F2  (subtle blue-tinted borders)
+
+Typography (import from Google Fonts — free):
+  Primary Font:  "Poppins" (rounded, friendly, excellent readability)
+  Sizes:
+    H1 (Screen Title):     28sp / bold
+    H2 (Section Header):   22sp / semibold
+    Body (Data Fields):    18sp / regular
+    Labels:                16sp / medium
+    Helper / Captions:     14sp / regular
+    MINIMUM anywhere:      14sp (never below)
+
+Logo Concept:
+  - A stylized milk drop containing a small diary/book icon
+  - Color: White on primary blue background
+  - Generate SVG logo using the name "Apna Diary" + milk drop icon
+  - Use Lucide's "droplets" + "book-open" icons composed together if custom
+    SVG is not feasible
+
+Touch Target Rules:
+  - All tappable elements: minimum 44×44 px
+  - Primary action buttons (Save, Generate PDF): 56px height, full width
+  - Toggle switches: 52px wide × 32px tall
+  - Bottom navigation tabs: 72px tall
+  - Input fields: 56px tall with 18sp text and 16px padding
+
+Spacing System (Tailwind custom config):
+  - Section padding: 16px
+  - Card padding: 16px
+  - Between cards: 12px gap
+  - Button vertical padding: 16px
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 7 — SCREEN-BY-SCREEN SPECIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+────────────────────────────────────────────────────────────
+7.1  SCREEN 1: DAILY DATA ENTRY  (Route: /)
+────────────────────────────────────────────────────────────
+This is the HOME screen. App always opens here. No other screen is shown first.
+
+LAYOUT (top to bottom):
+  [A] App Header Bar (fixed top, 56px tall, primary blue #2B7FBF)
+      - Left:  Apna Diary logo + wordmark (white)
+      - Right: Settings icon (gear, 28px, white, navigates to /settings)
+
+  [B] Date Navigator Bar (sticky below header, white bg, shadow)
+      - Left arrow "←"  (44×44 tap area, navigates to previous day)
+      - Center: Date display "Monday, 2 March 2026" (22sp bold, tappable
+        to open calendar date picker modal)
+      - Right arrow "→" (44×44 tap area, navigates to next day;
+        DISABLED and grayed if date is today or future)
+      - Small calendar icon next to date text (opens DatePicker modal)
+
+  [C] Summary Strip (below date bar, light blue bg #EBF4FB, 64px tall)
+      - Left:  "Customers: X"       (total customers)
+      - Center: "Pending: Y"        (not yet entered today)
+      - Right:  "Today's Total: ₹Z" (sum of all today's entries)
+      All figures update in real time as entries are saved.
+
+  [D] Customer List (scrollable, takes remaining screen height)
+      Each customer is rendered as a CustomerCard component:
+
+      ┌──────────────────────────────────────────────────┐
+      │  [Avatar initials circle]  RAMESH GUPTA          │
+      │  🥛 Not entered yet          ›  [Tap to expand] │
+      └──────────────────────────────────────────────────┘
+
+      When tapped, card EXPANDS in-place (no navigation) to show EntryForm:
+
+      ┌──────────────────────────────────────────────────────────┐
+      │  RAMESH GUPTA                               [✕ collapse] │
+      ├──────────────────────────────────────────────────────────┤
+      │  🥛 Milk (litres)                                        │
+      │  [ − ]  [ 0.50 ]  [ + ]   (stepper, 0.25 increment)    │
+      │         or type manually (number keyboard)               │
+      │                                                          │
+      │  🧀 Paneer   [ OFF ●───── ]  (toggle, default OFF)      │
+      │     [only shown when toggled ON]                         │
+      │     Paneer (kg): [ 0.00 ]  (number input, 2 decimal)    │
+      │                                                          │
+      │  🥣 Dahi     [ OFF ●───── ]  (toggle, default OFF)      │
+      │     [only shown when toggled ON]                         │
+      │     Dahi (kg):   [ 0.00 ]  (number input, 2 decimal)    │
+      │                                                          │
+      │  Price: ₹18.50/L milk  [custom price badge if override] │
+      │  Amount: ₹9.25 today                                    │
+      │                                                          │
+      │  [       SAVE ENTRY       ]  (orange button, 56px tall) │
+      │  [    Mark as No Purchase  ]  (ghost/text button)       │
+      └──────────────────────────────────────────────────────────┘
+
+  Ordering Rules (see Section 8 for full logic):
+  - Customers not yet entered today → sorted A–Z by name
+  - Customers already entered today → moved to bottom, in order of entry time
+  - "Mark as No Purchase" also moves customer to bottom with zero-entry
+
+  Draft Auto-Save:
+  - As soon as any field is changed in EntryForm, save draft to IndexedDB
+  - Show small "Draft saved" indicator below the form (not a toast)
+  - Draft is shown with a 🔵 dot on the CustomerCard
+  - If app is closed and reopened, draft is restored automatically
+  - Draft is only cleared after explicit "SAVE ENTRY" tap
+
+  After Save:
+  - Green toast: "✅ Entry saved for Ramesh Gupta"
+  - Customer card collapses and moves to bottom of list
+  - Summary Strip totals update immediately
+
+  "Mark as No Purchase" behavior:
+  - Saves a zero-entry (all quantities 0) for that day
+  - Moves customer to bottom
+  - No WhatsApp message sent for zero entries
+
+  Keyboard Behavior:
+  - Number pad opens for all quantity inputs
+  - "Done"/"Next" on keyboard moves to next input
+  - Tapping outside the card does NOT collapse it (prevents accidental closes)
+  - Explicit ✕ button to collapse without saving (draft preserved)
+
+  Error States:
+  - If milk qty is 0 AND paneer/dahi toggles are OFF → show inline warning:
+    "Please enter at least one quantity or mark as No Purchase"
+  - If offline → show banner: "📶 Offline — entry will sync when connected"
+
+  Accessibility:
+  - aria-label on all buttons ("Save entry for Ramesh Gupta")
+  - aria-expanded on customer cards
+  - Focus trap inside expanded EntryForm
+  - All text min 18sp
+
+────────────────────────────────────────────────────────────
+7.2  SCREEN 2: ADD / EDIT CUSTOMER  (Routes: /customers/add, /customers/:id/edit)
+────────────────────────────────────────────────────────────
+Accessed via:
+  - FAB (Floating Action Button) "+" on Daily Entry screen (bottom-right)
+  - Long-press on a customer card → context menu → "Edit Customer"
+  - Swipe-left on customer card → reveals Edit and Delete actions
+
+LAYOUT:
+  [A] Header: "Add Customer" or "Edit Customer" with ← back arrow
+
+  [B] Form Fields (all 56px tall inputs, 18sp text):
+
+      FULL NAME *           [__________________________]
+      PHONE NUMBER *        [+91] [__________________]
+                            (auto-format: +91XXXXXXXXXX)
+      ADDRESS               [__________________________]
+                            (optional, placeholder: "Street, City")
+      NOTES                 [__________________________]
+                            (optional, placeholder: "e.g., delivers at 7am")
+      DEFAULT MILK QTY (L)  [ 0.50 ]
+                            (pre-fills milk qty in EntryForm every day)
+
+  [C] Custom Price Section:
+      ┌──────────────────────────────────────────────────────────┐
+      │  Use Custom Prices for this customer?  [ OFF ●─────── ] │
+      │  (toggle; when ON, expands to show below)                │
+      │                                                          │
+      │  🥛 Milk Price (₹/litre):     [ _____ ]                 │
+      │  🧀 Paneer Price (₹/kg):      [ _____ ]                 │
+      │  🥣 Dahi Price (₹/kg):        [ _____ ]                 │
+      │                                                          │
+      │  Effective From: TODAY (label, not editable)             │
+      │  ℹ️  "Custom prices apply from today onwards only"       │
+      └──────────────────────────────────────────────────────────┘
+      NOTE: Leaving a custom price field blank means that item uses
+      the global price for this customer.
+
+  [D] WhatsApp Consent Section:
+      ┌──────────────────────────────────────────────────────────┐
+      │  📱 WhatsApp Notifications                               │
+      │  [ ✓ ] This customer agrees to receive daily WhatsApp   │
+      │        messages about their purchases from Apna Diary    │
+      │  (checkbox, default: checked)                            │
+      │                                                          │
+      │  On first save with consent=YES, send this welcome msg: │
+      │  ─────────────────────────────────────────────────────  │
+      │  "Namaste 🙏                                             │
+      │   Welcome to the Apna Diary Family 🤍                   │
+      │   We will maintain your daily dairy records carefully    │
+      │   and keep you updated.                                  │
+      │   Thank you for choosing us!                             │
+      │   – Apna Diary 🥛"                                      │
+      └──────────────────────────────────────────────────────────┘
+
+  [E] Action Buttons:
+      [       SAVE CUSTOMER       ]  (primary orange, 56px)
+      [     DELETE CUSTOMER       ]  (red outlined, 56px — only in Edit mode)
+      Delete shows confirmation dialog:
+        "Delete Ramesh Gupta? All entries will be removed. This cannot be undone."
+        [Cancel]  [Yes, Delete]
+
+  Validation:
+  - Name: required, min 2 chars, max 50 chars
+  - Phone: required, must be 10 digits (stored with +91 prefix)
+  - Custom prices: optional, if entered must be > 0 and < 9999
+
+────────────────────────────────────────────────────────────
+7.3  SCREEN 3: MONTHLY SUMMARY  (Route: /summary)
+────────────────────────────────────────────────────────────
+Accessed via bottom navigation tab "Summary" (calendar icon).
+
+LAYOUT:
+
+  [A] Header: "Monthly Summary"
+      Month selector: "← February 2026 →" (prev/next month arrows + tap for picker)
+
+  [B] Monthly Calendar Widget (compact, 7-column grid):
+      - Shows current month with colored dots per day:
+        🟢 Green dot = entries exist for that day
+        🟡 Yellow dot = some customers pending (partial entries)
+        ⚪ Grey = no entries / future date
+      - Tap any past day → navigate to Screen 1 (/daily-entry) for that date
+
+  [C] Month-Level Summary Cards (horizontal scroll row):
+      ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+      │ Total Billed │  │  Total Paid  │  │  Total Dues  │
+      │   ₹12,450    │  │   ₹10,000    │  │    ₹2,450    │
+      └──────────────┘  └──────────────┘  └──────────────┘
+
+  [D] Customer List for that month (sorted A–Z):
+
+      ┌────────────────────────────────────────────────────┐
+      │  RAMESH GUPTA                              ›       │
+      │  🥛 45L milk  🧀 2.5kg paneer              total  │
+      │  Billed: ₹900  Paid: ₹900  ✅ Clear               │
+      └────────────────────────────────────────────────────┘
+
+      ┌────────────────────────────────────────────────────┐
+      │  SUNITA DEVI                               ›       │
+      │  🥛 30L milk                               total  │
+      │  Billed: ₹600  Paid: ₹400  ⚠️ Due: ₹200          │
+      │  (+ ₹150 due from Jan 2026)                        │
+      └────────────────────────────────────────────────────┘
+
+      Past dues from prior months are shown inline as a secondary line
+      in orange/red, e.g., "+ ₹150 due from Jan 2026".
+      Total outstanding = current month dues + all past month dues.
+
+  Tapping any customer card navigates to Screen 4 (Customer Monthly Detail).
+
+────────────────────────────────────────────────────────────
+7.4  SCREEN 4: CUSTOMER MONTHLY DETAIL  (Route: /summary/:customerId?month=YYYY-MM)
+────────────────────────────────────────────────────────────
+LAYOUT:
+
+  [A] Header: "RAMESH GUPTA — February 2026" with ← back
+
+  [B] Summary Banner:
+      Billed: ₹900  |  Paid: ₹900  |  Balance: ₹0 (green = clear)
+      OR
+      Billed: ₹600  |  Paid: ₹400  |  Due: ₹200 (red = outstanding)
+      Past Dues: ₹150 (from Jan 2026)
+      TOTAL OUTSTANDING: ₹350
+
+  [C] Daily Breakdown Table:
+      ──────────────────────────────────────────────────────
+      Date       Milk(L)  Paneer  Dahi   Amount   Edit
+      ──────────────────────────────────────────────────────
+      01 Feb     0.5L     —       —      ₹9.00    [✏️]
+      02 Feb     0.5L     0.25kg  —      ₹49.00   [✏️]
+      03 Feb     —        —       —      No entry  [+]
+      04 Feb     1.0L     —       0.5kg  ₹53.00   [✏️]
+      ...
+      ──────────────────────────────────────────────────────
+      Tapping [✏️] opens an inline edit row for that day's entry.
+      Tapping [+] for a day with no entry opens EntryForm for that date.
+
+      Edit Row Behavior:
+      - Shows same fields as EntryForm (milk qty, paneer toggle, dahi toggle)
+      - Shows: "⚠️ Editing past entry — customer will be notified via WhatsApp"
+        (Phase 3 feature — stub the UI now, wire in Phase 3)
+      - Save edit → updates ONLY that day's record
+      - Logs edit to AuditLog table with timestamp, old values, new values
+      - Audit log is NEVER shown to customers (only internal)
+
+  [D] Payment Section:
+      ┌──────────────────────────────────────────────────────────┐
+      │  PAYMENTS RECEIVED                     [+ Add Payment]   │
+      ├──────────────────────────────────────────────────────────┤
+      │  10 Feb 2026 — ₹500 paid    Cash       [✏️] [🗑️]        │
+      │  20 Feb 2026 — ₹400 paid    UPI        [✏️] [🗑️]        │
+      └──────────────────────────────────────────────────────────┘
+
+      Add Payment Modal:
+        Date: [today, editable]
+        Amount: [______] ₹
+        Method: [ Cash | UPI | Other ]
+        Notes:  [optional]
+        [SAVE PAYMENT]
+
+      Payments are shown in the PDF statement.
+
+  [E] Past Dues Section (collapsible):
+      ┌──────────────────────────────────────────────────────────┐
+      │  PAST DUES                                    [▼ Show]   │
+      ├──────────────────────────────────────────────────────────┤
+      │  January 2026: Billed ₹600, Paid ₹450, Due ₹150         │
+      │  December 2025: Billed ₹550, Paid ₹550, Due ₹0 ✅       │
+      └──────────────────────────────────────────────────────────┘
+
+  [F] Action Buttons:
+      [  📄 GENERATE PDF STATEMENT  ]  (primary orange, full width, 56px)
+      [  📥 EXPORT CSV              ]  (outlined, full width)
+
+────────────────────────────────────────────────────────────
+7.5  SCREEN 5: SETTINGS  (Route: /settings)
+────────────────────────────────────────────────────────────
+LAYOUT:
+
+  Section: Shop Information
+  - Shop / Seller Name:    [______________]  (shown on PDFs)
+  - Seller Phone (+91):    [______________]  (for WhatsApp sender — Phase 3)
+
+  Section: Global Prices
+  [→ Tap to open Price Settings Screen 6]
+  Shows current prices: "Milk: ₹18/L  |  Paneer: ₹350/kg  |  Dahi: ₹60/kg"
+
+  Section: Notifications
+  - Daily entry reminder:  [ON/OFF toggle]
+  - Reminder time:         [08:00 AM  ▼]  (time picker)
+
+  Section: WhatsApp (Phase 3 — show but disable in Phase 1/2)
+  - WhatsApp sender number: [grayed out — "Coming Soon"]
+  - Send time: 10:00 PM IST (fixed, shown as info label)
+  - Test WhatsApp: [grayed out button]
+
+  Section: Data & Backup
+  - [  📥 Export All Data as CSV  ]
+  - [  📄 Export All Data as PDF  ]
+  - [  ☁️  Backup to Supabase Cloud  ]  (shows last backup time)
+  - [  📤 Import / Restore Backup  ]
+
+  Section: About
+  - App version, Apna Diary tagline, contact info placeholder
+
+────────────────────────────────────────────────────────────
+7.6  SCREEN 6: PRICE SETTINGS  (Route: /settings/prices)
+────────────────────────────────────────────────────────────
+LAYOUT:
+
+  [A] Header: "Global Prices"
+
+  [B] Current Active Prices:
+      🥛 Milk Price (₹/litre):   [ 18.00 ]
+      🧀 Paneer Price (₹/kg):    [ 350.00 ]
+      🥣 Dahi Price (₹/kg):      [ 60.00  ]
+
+  [C] Info Banner:
+      ℹ️  "Changing prices here will apply to NEW entries only.
+           Past entries will keep the price at the time of entry."
+
+  [D] Price History (collapsible list):
+      Shows all previous global price records with effective dates.
+      E.g.:
+        18 Jan 2026 — Milk: ₹17/L → ₹18/L
+
+  [E] [  SAVE NEW PRICES  ] button (orange, 56px)
+      On save: creates new GlobalPrices record with today's date.
+      Old record is kept in history (never deleted).
+
+────────────────────────────────────────────────────────────
+7.7  BOTTOM NAVIGATION BAR (persistent, fixed bottom)
+────────────────────────────────────────────────────────────
+  72px tall, white background, shadow-top.
+  Three tabs:
+  [📋 Daily Entry]   [📅 Summary]   [⚙️ Settings]
+  Active tab shows primary blue color + bold label.
+  Inactive tabs show grey icons + normal label.
+  Font size: 12sp for labels, icons 24px.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 8 — DATA MODEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+All tables are created in Supabase (PostgreSQL). Mirrored in IndexedDB locally.
+
+-- TABLE: customers
+{
+  id:                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name:              TEXT NOT NULL,                 -- "Ramesh Gupta"
+  phone:             TEXT NOT NULL UNIQUE,          -- "+919876543210"
+  address:           TEXT,                          -- optional
+  notes:             TEXT,                          -- optional
+  default_milk_qty:  DECIMAL(5,2) DEFAULT 0.50,     -- pre-fill in EntryForm
+  has_custom_price:  BOOLEAN DEFAULT FALSE,
+  whatsapp_consent:  BOOLEAN DEFAULT TRUE,
+  consent_given_at:  TIMESTAMPTZ,
+  is_active:         BOOLEAN DEFAULT TRUE,          -- soft delete
+  created_at:        TIMESTAMPTZ DEFAULT NOW(),
+  updated_at:        TIMESTAMPTZ DEFAULT NOW()
+}
+
+-- TABLE: price_overrides  (per-customer price overrides)
+{
+  id:               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id:      UUID REFERENCES customers(id) ON DELETE CASCADE,
+  milk_price:       DECIMAL(8,2),    -- null = use global price
+  paneer_price:     DECIMAL(8,2),    -- null = use global price
+  dahi_price:       DECIMAL(8,2),    -- null = use global price
+  effective_from:   DATE NOT NULL,   -- set to TODAY on creation
+  created_at:       TIMESTAMPTZ DEFAULT NOW()
+}
+NOTE: Only the LATEST price_override record with effective_from <= entry_date
+is applied. Past entries use the price that was active on that entry date.
+Per-customer overrides apply from effective_from date forward (not retroactive).
+
+-- TABLE: global_prices
+{
+  id:             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  milk_price:     DECIMAL(8,2) NOT NULL,
+  paneer_price:   DECIMAL(8,2) NOT NULL,
+  dahi_price:     DECIMAL(8,2) NOT NULL,
+  effective_from: DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_at:     TIMESTAMPTZ DEFAULT NOW()
+}
+NOTE: Always seed one initial record on first app launch.
+When user changes global prices, INSERT a new record (never UPDATE old ones).
+To get active price for a given date: SELECT * FROM global_prices
+  WHERE effective_from <= :date ORDER BY effective_from DESC LIMIT 1;
+
+-- TABLE: daily_entries
+{
+  id:                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id:       UUID REFERENCES customers(id) ON DELETE CASCADE,
+  entry_date:        DATE NOT NULL,
+  milk_qty:          DECIMAL(5,2) DEFAULT 0.00,    -- litres
+  paneer_qty:        DECIMAL(5,2) DEFAULT 0.00,    -- kg
+  dahi_qty:          DECIMAL(5,2) DEFAULT 0.00,    -- kg
+  milk_price_used:   DECIMAL(8,2) NOT NULL,        -- snapshot at entry time
+  paneer_price_used: DECIMAL(8,2) NOT NULL,        -- snapshot at entry time
+  dahi_price_used:   DECIMAL(8,2) NOT NULL,        -- snapshot at entry time
+  total_amount:      DECIMAL(10,2) GENERATED ALWAYS AS
+                     (milk_qty * milk_price_used +
+                      paneer_qty * paneer_price_used +
+                      dahi_qty * dahi_price_used) STORED,
+  is_draft:          BOOLEAN DEFAULT FALSE,
+  whatsapp_sent:     BOOLEAN DEFAULT FALSE,
+  whatsapp_sent_at:  TIMESTAMPTZ,
+  synced:            BOOLEAN DEFAULT FALSE,        -- IndexedDB sync flag
+  created_at:        TIMESTAMPTZ DEFAULT NOW(),
+  updated_at:        TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(customer_id, entry_date)
+}
+
+-- TABLE: audit_log  (edit history — never shown to customers)
+{
+  id:            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  entry_id:      UUID REFERENCES daily_entries(id) ON DELETE CASCADE,
+  customer_id:   UUID REFERENCES customers(id),
+  changed_at:    TIMESTAMPTZ DEFAULT NOW(),
+  changed_by:    TEXT DEFAULT 'seller',           -- Phase 4: user email
+  field_changed: TEXT,                             -- "milk_qty"
+  old_value:     JSONB,                            -- { milk_qty: 0.5 }
+  new_value:     JSONB,                            -- { milk_qty: 1.0 }
+  reason:        TEXT                              -- optional
+}
+
+-- TABLE: payments
+{
+  id:             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id:    UUID REFERENCES customers(id) ON DELETE CASCADE,
+  payment_date:   DATE NOT NULL DEFAULT CURRENT_DATE,
+  amount_paid:    DECIMAL(10,2) NOT NULL,
+  payment_method: TEXT DEFAULT 'Cash',   -- 'Cash' | 'UPI' | 'Other'
+  notes:          TEXT,
+  synced:         BOOLEAN DEFAULT FALSE,
+  created_at:     TIMESTAMPTZ DEFAULT NOW()
+}
+
+-- TABLE: settings  (single row per installation)
+{
+  id:                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  seller_name:           TEXT DEFAULT 'Apna Diary',
+  seller_phone:          TEXT,                         -- Phase 3
+  timezone:              TEXT DEFAULT 'Asia/Kolkata',
+  whatsapp_send_time:    TEXT DEFAULT '22:00',
+  send_only_if_purchase: BOOLEAN DEFAULT TRUE,
+  reminder_enabled:      BOOLEAN DEFAULT TRUE,
+  reminder_time:         TEXT DEFAULT '08:00',
+  created_at:            TIMESTAMPTZ DEFAULT NOW(),
+  updated_at:            TIMESTAMPTZ DEFAULT NOW()
+}
+
+-- TABLE: backup_records
+{
+  id:           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  backup_date:  TIMESTAMPTZ DEFAULT NOW(),
+  backup_type:  TEXT,    -- 'manual_csv' | 'manual_pdf' | 'cloud_supabase'
+  file_size_kb: INTEGER,
+  status:       TEXT,    -- 'success' | 'failed'
+  notes:        TEXT
+}
+
+-- TABLE: whatsapp_send_log  (Phase 3)
+{
+  id:             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id:    UUID REFERENCES customers(id),
+  send_date:      DATE NOT NULL,
+  sent_at:        TIMESTAMPTZ,
+  template_used:  TEXT,   -- 'template_1' | 'template_2' | 'template_3'
+  status:         TEXT,   -- 'sent' | 'failed' | 'skipped'
+  retry_count:    INTEGER DEFAULT 0,
+  error_message:  TEXT
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 9 — BUSINESS LOGIC
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+9.1 ALPHABETICAL ORDERING + "MOVE TO END AFTER SAVE"
+
+  Rule:
+  - On app open for a given date, if ZERO entries exist for that date,
+    show ALL active customers sorted A–Z.
+  - Once an entry is saved for customer X:
+    → Customer X moves to the BOTTOM of the customer list.
+    → Remaining unsaved customers stay sorted A–Z at the top.
+  - Order = [unsaved, A–Z] followed by [saved today, in order of save time].
+  - If the user navigates to a PAST date:
+    → All customers who HAVE an entry for that date appear at the top
+       (sorted A–Z, since the day is done).
+    → Customers with NO entry for that date appear below (sorted A–Z).
+    → The "+ Add entry" button is shown for customers with no past entry.
+
+  Implementation (IndexedDB-first):
+  - Maintain a local array: savedTodayQueue (ordered by save timestamp)
+  - On each screen render for today: filter(not in savedTodayQueue) → sort A–Z
+    → concat savedTodayQueue
+  - This array persists in IndexedDB per date and syncs to Supabase.
+
+  Edge Cases:
+  - Customer added AFTER today's session started → appears at top of A–Z list.
+  - Customer deleted mid-day → removed from list immediately.
+  - App refresh → reconstruct order from IndexedDB (timestamps preserved).
+
+9.2 PRICING LOGIC
+
+  For any given DailyEntry, the price used is determined at SAVE TIME:
+  Step 1: Check price_overrides for this customer with
+          effective_from <= entry_date. Take the most recent one.
+  Step 2: If no override exists (or override field is NULL for that item),
+          fall back to global_prices where effective_from <= entry_date,
+          most recent record.
+  Step 3: Snapshot the resolved prices into milk_price_used, paneer_price_used,
+          dahi_price_used at the moment of saving. These snapshots are
+          IMMUTABLE — changing global prices later does NOT affect past entries.
+
+  This means:
+  - Global price changes apply ONLY to new entries going forward. ✅
+  - Per-customer overrides are effective from effective_from date onward. ✅
+  - Retroactive recalculation: NEVER. Past entries are locked by snapshot. ✅
+
+9.3 EDIT RULES AND AUDIT LOG
+
+  Who can edit: Only the seller (currently single user).
+  What can be edited: Any field of any past DailyEntry (milk_qty, paneer_qty,
+    dahi_qty). Prices used (milk_price_used etc.) are NOT editable — they are
+    locked to the original snapshot.
+  total_amount recalculates automatically (it's a generated column).
+
+  On edit:
+  Step 1: Read current values from daily_entries.
+  Step 2: Write old values + new values to audit_log.
+  Step 3: Update the daily_entries record.
+  Step 4: Show toast: "✅ Entry updated for 2 Feb 2026"
+  Step 5: (Phase 3) Trigger WhatsApp correction message to customer.
+
+  Audit log is visible ONLY in Settings > Data & Backup > View Audit Log.
+  It is NEVER included in customer-facing PDFs.
+
+9.4 DUE / EXTRA PAID CALCULATION
+
+  For a given customer and month:
+    total_billed   = SUM(daily_entries.total_amount WHERE month = X)
+    total_paid     = SUM(payments.amount_paid WHERE month = X)
+    month_balance  = total_billed - total_paid
+      → positive = dues (customer owes seller)
+      → negative = extra paid / advance (seller owes customer)
+
+  Past dues are carried forward:
+    cumulative_balance = SUM of month_balance for all months up to current month
+    This is the "Total Outstanding" shown in the Summary screen.
+
+  "Amount Paid" in PDF = payments for that specific month only.
+  "Carried Forward Dues" = balance from all previous months.
+  "Total Outstanding" = current month dues + carried forward dues.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 10 — DATE NAVIGATION & HISTORY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- "←" arrow navigates to previousDay; "→" arrow navigates to nextDay.
+- "→" is disabled (grayed, non-tappable) when currentDate = today.
+- Tapping the date text opens a calendar date-picker modal (shadcn-style, full
+  month view, mark days with entries as green dots).
+- Selecting a future date is BLOCKED in the date picker (no future entries).
+- When viewing a past date, a banner appears:
+  "📅 Viewing entries for 14 Jan 2026 — Tap today's date to return"
+  with a [Go to Today] quick-action button.
+- Day roll-over: "today" is determined by device clock in Asia/Kolkata timezone
+  using date-fns-tz. At midnight IST, the app automatically transitions to
+  the new day (if open, show a toast: "🌙 New day started — 3 March 2026").
+- Drafts from yesterday that were NOT saved are highlighted with a red banner
+  on app open: "⚠️ You have 2 unsaved drafts from yesterday. Review them?"
+  → Tap to navigate to yesterday's date.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 11 — PDF GENERATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Library: jsPDF + html2canvas (client-side, no server needed, free)
+         OR @react-pdf/renderer (if richer layout control is needed)
+         Recommendation: Use @react-pdf/renderer for cleaner table layouts.
+
+Format: A4 (210mm × 297mm), Portrait orientation.
+Filename: Apna_Diary_{CustomerName}_{Month}_{Year}.pdf
+
+PDF LAYOUT (single customer monthly statement):
+
+┌──────────────────────────────────────────────────────────────┐
+│  HEADER                                                       │
+│  [Apna Diary Logo]         Apna Diary | Fresh & Pure Daily 🥛│
+│  Shop: {seller_name}                                          │
+│  Phone: {seller_phone}                                        │
+│  Statement for: {customer_name}  |  Phone: {customer_phone}  │
+│  Period: February 2026                                        │
+│  Generated: 2 March 2026                                      │
+├──────────────────────────────────────────────────────────────┤
+│  DAILY BREAKDOWN                                              │
+│  ┌─────┬──────────┬────────┬───────┬──────────┬──────────┐  │
+│  │ Date│ Milk (L) │Paneer  │ Dahi  │  Rate    │ Amount   │  │
+│  ├─────┼──────────┼────────┼───────┼──────────┼──────────┤  │
+│  │01Feb│   0.5    │  —     │  —    │ ₹18/L    │ ₹9.00    │  │
+│  │02Feb│   0.5    │ 0.25kg │  —    │ ₹18/L    │ ₹96.50   │  │
+│  │ ... │  ...     │ ...    │ ...   │  ...     │  ...     │  │
+│  ├─────┴──────────┴────────┴───────┴──────────┴──────────┤  │
+│  │                      Monthly Total: ₹XXX.XX            │  │
+│  └────────────────────────────────────────────────────────┘  │
+├──────────────────────────────────────────────────────────────┤
+│  PAYMENT DETAILS                                              │
+│  10 Feb — ₹500 (Cash)                                        │
+│  20 Feb — ₹400 (UPI)                                         │
+│  Total Paid this month: ₹900.00                              │
+├──────────────────────────────────────────────────────────────┤
+│  BALANCE SUMMARY                                              │
+│  Carried Forward (from Jan 2026): ₹150.00 (Due)             │
+│  This Month Billed:               ₹600.00                    │
+│  This Month Paid:                 ₹900.00                    │
+│  ─────────────────────────────────────────────────────────── │
+│  TOTAL OUTSTANDING:               ₹-150.00 (Advance Paid)    │
+│  OR: TOTAL DUE:                   ₹200.00                    │
+├──────────────────────────────────────────────────────────────┤
+│  FOOTER                                                       │
+│  Thank you for choosing Apna Diary 🙏                         │
+│  This is a computer-generated statement. No signature needed. │
+│  Apna Diary | Fresh & Pure Daily | Page 1 of 1               │
+└──────────────────────────────────────────────────────────────┘
+
+Rules:
+- Days with zero entry (no purchase, "Mark as No Purchase") are NOT shown.
+- Days where customer had no interaction at all are NOT shown.
+- Custom prices are used per-row, shown in "Rate" column.
+- Audit log edits are NEVER shown in PDF.
+- If payment method is "UPI", show it. If "Cash", show it.
+- PDF is generated client-side and downloaded immediately.
+- Option to SHARE PDF via system share sheet (for WhatsApp/email sharing).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 12 — WHATSAPP AUTOMATION  (Phase 3 — implement second-to-last)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Recommended Approach: n8n (self-hosted on Railway.app free tier OR n8n.cloud
+  free trial) + WhatsApp Business Cloud API (Meta free tier: 1000 service
+  conversations/month free).
+
+Fallback (if API not yet approved): WhatsApp Web share link opened via
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`)
+  — requires seller to manually tap "Send" per customer. Usable as stub.
+
+NIGHTLY JOB SPEC (n8n Workflow):
+  
