@@ -26,6 +26,8 @@ export default function PriceConfirmDialog({
   if (paneerPrice) priceLines.push(`🧀 Paneer: ₹${paneerPrice}/kg`);
   if (dahiPrice) priceLines.push(`🥣 Dahi: ₹${dahiPrice}/kg`);
 
+  const currentMonthLabel = new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' });
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-surface rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
@@ -47,8 +49,8 @@ export default function PriceConfirmDialog({
             </div>
           )}
           <p className="text-label text-text-secondary font-poppins leading-relaxed">
-            This will update all entries in the current month from today onwards,
-            and apply to all future months. Past months are untouched.
+            This will update ALL entries in {currentMonthLabel} (current month)
+            and apply to all future months. Past months will not be affected.
           </p>
         </div>
 

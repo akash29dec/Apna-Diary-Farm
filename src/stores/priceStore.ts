@@ -112,8 +112,9 @@ export const usePriceStore = create<PriceState>((set, get) => ({
     // Step 1: Insert new price_override row (effective_from = today)
     await get().savePriceOverride(customerId, milkPrice, paneerPrice, dahiPrice);
 
-    // Step 2: Retroactively update entries from today → end of current month
-    const updatedCount = await applyRetroactivePriceUpdate(customerId);
+    // Step 2: Retroactively update ALL entries in the current month
+    // Pass the new prices directly since resolvePrice() won't find them for past dates
+    const updatedCount = await applyRetroactivePriceUpdate(customerId, milkPrice, paneerPrice, dahiPrice);
 
     return updatedCount;
   },

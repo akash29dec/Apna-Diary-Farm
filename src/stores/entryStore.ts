@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import type { DailyEntry, EntryDraft } from '@/types';
 import {
   getEntriesByDate,
+  getEntryByCustomerDate,
   saveEntry as saveEntryLocal,
   saveDraft as saveDraftLocal,
   getDraft as getDraftLocal,
@@ -137,11 +138,15 @@ export const useEntryStore = create<EntryState>((set, get) => ({
   },
 
   markNoPurchase: async (customerId: string) => {
+    const { selectedDate } = get();
+    // Find existing entry to overwrite (prevents unique constraint violation)
+    const existingEntry = await getEntryByCustomerDate(customerId, selectedDate);
     await get().saveEntry({
       customerId,
       milkQty: 0,
       paneerQty: 0,
       dahiQty: 0,
+      existingEntryId: existingEntry?.id,
     });
   },
 

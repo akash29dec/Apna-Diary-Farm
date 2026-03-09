@@ -65,23 +65,33 @@ export function calculateEntryTotal(entry: Pick<DailyEntry, 'milk_qty' | 'paneer
 }
 
 /**
- * Apply a retroactive price update for the current month (from today onwards).
+ * Apply a retroactive price update for the ENTIRE current month.
  * Called after inserting a new price_override row.
+ * 
+ * IMPORTANT: We accept the new override prices directly instead of using
+ * resolvePrice(), because resolvePrice() filters by effective_from <= entryDate,
+ * and the new override has effective_from = today. For entries BEFORE today in
+ * the same month, resolvePrice() would not pick up the new override.
+ * 
  * Returns the count of entries that were updated.
  */
 export async function applyRetroactivePriceUpdate(
-  customerId: string
+  customerId: string,
+  newMilkPrice: number | null,
+  newPaneerPrice: number | null,
+  newDahiPrice: number | null
 ): Promise<number> {
   const today = getISTDateString();
   const yearMonth = today.substring(0, 7);
+  const monthStart = `${yearMonth}-01`;
   const parts = yearMonth.split('-');
   const y = parseInt(parts[0] ?? '2026', 10);
   const m = parseInt(parts[1] ?? '1', 10);
   const lastDay = new Date(y, m, 0).getDate();
   const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
-  // Get entries from today through end of current month
-  const entries = await getEntriesByCustomerDateRange(customerId, today, monthEnd);
+  // Get ALL entries in the current month (1st to last day)
+  const entries = await getEntriesByCustomerDateRange(customerId, monthStart, monthEnd);
 
   let updatedCount = 0;
 
@@ -93,29 +103,33 @@ export async function applyRetroactivePriceUpdate(
       total_amount: entry.total_amount,
     };
 
-    // Resolve new prices (will pick up the just-inserted override)
-    const newPrices = await resolvePrice(customerId, entry.entry_date);
+    // For each entry, resolve the effective price:
+    // Use the new override price if set, otherwise fall back to the global price for that date
+    const globalPrice = await getActiveGlobalPrice(entry.entry_date);
+    const effectiveMilk = newMilkPrice ?? globalPrice?.milk_price ?? 18.0;
+    const effectivePaneer = newPaneerPrice ?? globalPrice?.paneer_price ?? 350.0;
+    const effectiveDahi = newDahiPrice ?? globalPrice?.dahi_price ?? 60.0;
 
     const newTotal = calculateTotal(
       entry.milk_qty,
       entry.paneer_qty,
       entry.dahi_qty,
-      newPrices.milk_price,
-      newPrices.paneer_price,
-      newPrices.dahi_price
+      effectiveMilk,
+      effectivePaneer,
+      effectiveDahi
     );
 
     // Only update if prices actually changed
     if (
-      entry.milk_price_used !== newPrices.milk_price ||
-      entry.paneer_price_used !== newPrices.paneer_price ||
-      entry.dahi_price_used !== newPrices.dahi_price
+      entry.milk_price_used !== effectiveMilk ||
+      entry.paneer_price_used !== effectivePaneer ||
+      entry.dahi_price_used !== effectiveDahi
     ) {
       const updatedEntry: DailyEntry = {
         ...entry,
-        milk_price_used: newPrices.milk_price,
-        paneer_price_used: newPrices.paneer_price,
-        dahi_price_used: newPrices.dahi_price,
+        milk_price_used: effectiveMilk,
+        paneer_price_used: effectivePaneer,
+        dahi_price_used: effectiveDahi,
         total_amount: newTotal,
         synced: false,
         updated_at: new Date().toISOString(),
@@ -134,9 +148,9 @@ export async function applyRetroactivePriceUpdate(
         field_changed: 'price_override_applied',
         old_value: oldPrices,
         new_value: {
-          milk_price_used: newPrices.milk_price,
-          paneer_price_used: newPrices.paneer_price,
-          dahi_price_used: newPrices.dahi_price,
+          milk_price_used: effectiveMilk,
+          paneer_price_used: effectivePaneer,
+          dahi_price_used: effectiveDahi,
           total_amount: newTotal,
         },
         reason: 'price_override_applied',
@@ -146,7 +160,10 @@ export async function applyRetroactivePriceUpdate(
       // Sync to Supabase if online
       if (navigator.onLine && isSupabaseConfigured()) {
         try {
-          await upsertDailyEntry(updatedEntry);
+          // Exclude total_amount — it's a generated column in Supabase
+          const { total_amount: _omit, ...entryForSupabase } = updatedEntry;
+          void _omit;
+          await upsertDailyEntry(entryForSupabase);
           await insertAuditLog({
             entry_id: auditLog.entry_id,
             customer_id: auditLog.customer_id,
@@ -167,3 +184,4 @@ export async function applyRetroactivePriceUpdate(
 
   return updatedCount;
 }
+
