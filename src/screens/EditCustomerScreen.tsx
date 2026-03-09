@@ -7,6 +7,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import CustomerForm from '@/components/CustomerForm';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
+import PriceConfirmDialog from '@/components/PriceConfirmDialog';
 import { useCustomerStore } from '@/stores/customerStore';
 import { usePriceStore } from '@/stores/priceStore';
 import type { Customer } from '@/types';
@@ -17,12 +18,17 @@ export default function EditCustomerScreen() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { getCustomer, updateCustomer, deleteCustomer } = useCustomerStore();
-  const { savePriceOverride } = usePriceStore();
+  const { applyPriceOverrideWithRetroactive, getOverridesForCustomer } = usePriceStore();
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Price confirm dialog state
+  const [pendingFormData, setPendingFormData] = useState<CustomerFormValues | null>(null);
+  const [showPriceConfirm, setShowPriceConfirm] = useState(false);
+  const [applyingPrice, setApplyingPrice] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -33,6 +39,41 @@ export default function EditCustomerScreen() {
   }, [id, getCustomer]);
 
   const handleSubmit = async (data: CustomerFormValues) => {
+    if (!id) return;
+
+    // Check if custom prices should be applied with retroactive update
+    if (data.has_custom_price) {
+      const milkPrice = data.custom_milk_price ? parseFloat(data.custom_milk_price) : null;
+      const paneerPrice = data.custom_paneer_price ? parseFloat(data.custom_paneer_price) : null;
+      const dahiPrice = data.custom_dahi_price ? parseFloat(data.custom_dahi_price) : null;
+
+      if (milkPrice !== null || paneerPrice !== null || dahiPrice !== null) {
+        // Check if prices actually changed from existing override
+        const existingOverrides = await getOverridesForCustomer(id);
+        const latestOverride = existingOverrides.sort(
+          (a, b) => new Date(b.effective_from).getTime() - new Date(a.effective_from).getTime()
+        )[0];
+
+        const pricesChanged =
+          !latestOverride ||
+          latestOverride.milk_price !== milkPrice ||
+          latestOverride.paneer_price !== paneerPrice ||
+          latestOverride.dahi_price !== dahiPrice;
+
+        if (pricesChanged) {
+          // Show confirmation dialog before applying
+          setPendingFormData(data);
+          setShowPriceConfirm(true);
+          return;
+        }
+      }
+    }
+
+    // No price change — just save customer data
+    await saveCustomerData(data);
+  };
+
+  const saveCustomerData = async (data: CustomerFormValues) => {
     if (!id) return;
 
     try {
@@ -46,22 +87,57 @@ export default function EditCustomerScreen() {
         whatsapp_consent: data.whatsapp_consent,
       });
 
-      // Save custom price override if enabled
-      if (data.has_custom_price) {
-        const milkPrice = data.custom_milk_price ? parseFloat(data.custom_milk_price) : null;
-        const paneerPrice = data.custom_paneer_price ? parseFloat(data.custom_paneer_price) : null;
-        const dahiPrice = data.custom_dahi_price ? parseFloat(data.custom_dahi_price) : null;
-
-        if (milkPrice !== null || paneerPrice !== null || dahiPrice !== null) {
-          await savePriceOverride(id, milkPrice, paneerPrice, dahiPrice);
-        }
-      }
-
-      toast.success(`✅ ${data.name} updated successfully`);
+      toast.success('✅ Customer details updated');
       navigate('/');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update customer';
       toast.error(message);
+    }
+  };
+
+  const handlePriceConfirm = async () => {
+    if (!id || !pendingFormData) return;
+    setApplyingPrice(true);
+
+    try {
+      const data = pendingFormData;
+      const milkPrice = data.custom_milk_price ? parseFloat(data.custom_milk_price) : null;
+      const paneerPrice = data.custom_paneer_price ? parseFloat(data.custom_paneer_price) : null;
+      const dahiPrice = data.custom_dahi_price ? parseFloat(data.custom_dahi_price) : null;
+
+      // Step 1: Save customer data
+      await updateCustomer(id, {
+        name: data.name.trim(),
+        phone: data.phone.startsWith('+91') ? data.phone : `+91${data.phone.replace(/\D/g, '')}`,
+        address: data.address.trim() || null,
+        notes: data.notes.trim() || null,
+        default_milk_qty: data.default_milk_qty,
+        has_custom_price: data.has_custom_price,
+        whatsapp_consent: data.whatsapp_consent,
+      });
+
+      // Step 2: Apply price override with retroactive update
+      const updatedCount = await applyPriceOverrideWithRetroactive(
+        id,
+        milkPrice,
+        paneerPrice,
+        dahiPrice
+      );
+
+      if (updatedCount > 0) {
+        toast.success(`✅ Custom price updated. ${updatedCount} entries in this month updated.`);
+      } else {
+        toast.success('✅ Custom price updated.');
+      }
+
+      setShowPriceConfirm(false);
+      setPendingFormData(null);
+      navigate('/');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update prices';
+      toast.error(message);
+    } finally {
+      setApplyingPrice(false);
     }
   };
 
@@ -70,7 +146,7 @@ export default function EditCustomerScreen() {
     setDeleting(true);
     try {
       await deleteCustomer(id);
-      toast.success('Customer deleted');
+      toast.success('🗑️ Customer removed');
       navigate('/');
     } catch {
       toast.error('Failed to delete customer');
@@ -145,6 +221,22 @@ export default function EditCustomerScreen() {
           onCancel={() => setShowDelete(false)}
           onConfirm={handleDelete}
           loading={deleting}
+        />
+      )}
+
+      {/* Price Confirmation */}
+      {showPriceConfirm && pendingFormData && (
+        <PriceConfirmDialog
+          customerName={pendingFormData.name}
+          milkPrice={pendingFormData.custom_milk_price}
+          paneerPrice={pendingFormData.custom_paneer_price}
+          dahiPrice={pendingFormData.custom_dahi_price}
+          onCancel={() => {
+            setShowPriceConfirm(false);
+            setPendingFormData(null);
+          }}
+          onConfirm={handlePriceConfirm}
+          loading={applyingPrice}
         />
       )}
     </div>

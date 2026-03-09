@@ -2,23 +2,27 @@
 // Daily Entry Screen (Home — Route: /)
 // ========================================
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import AppHeader from '@/components/AppHeader';
 import DateNavigator from '@/components/DateNavigator';
 import SummaryStrip from '@/components/SummaryStrip';
 import CustomerCard from '@/components/CustomerCard';
+import CustomerActionSheet from '@/components/CustomerActionSheet';
+import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import OfflineBanner from '@/components/OfflineBanner';
 import PastDateBanner from '@/components/PastDateBanner';
 import BottomNav from '@/components/BottomNav';
 import { useCustomerStore } from '@/stores/customerStore';
 import { useEntryStore } from '@/stores/entryStore';
 import { sortCustomersForDate } from '@/utils/ordering';
+import type { Customer } from '@/types';
+import toast from 'react-hot-toast';
 
 export default function DailyEntryScreen() {
   const navigate = useNavigate();
-  const { customers, fetchCustomers } = useCustomerStore();
+  const { customers, fetchCustomers, deleteCustomer } = useCustomerStore();
   const {
     entries,
     drafts,
@@ -28,6 +32,10 @@ export default function DailyEntryScreen() {
     fetchEntries,
     fetchDrafts,
   } = useEntryStore();
+
+  const [actionSheetCustomer, setActionSheetCustomer] = useState<Customer | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchCustomers();
@@ -49,6 +57,38 @@ export default function DailyEntryScreen() {
     }
     return map;
   }, [entries]);
+
+  const handleLongPress = useCallback((customer: Customer) => {
+    setActionSheetCustomer(customer);
+  }, []);
+
+  const handleEdit = useCallback(() => {
+    if (actionSheetCustomer) {
+      navigate(`/customers/${actionSheetCustomer.id}/edit`);
+      setActionSheetCustomer(null);
+    }
+  }, [actionSheetCustomer, navigate]);
+
+  const handleDeleteRequest = useCallback(() => {
+    if (actionSheetCustomer) {
+      setDeleteTarget(actionSheetCustomer);
+      setActionSheetCustomer(null);
+    }
+  }, [actionSheetCustomer]);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteCustomer(deleteTarget.id);
+      toast.success('🗑️ Customer removed');
+    } catch {
+      toast.error('Failed to delete customer');
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  }, [deleteTarget, deleteCustomer]);
 
   return (
     <div className="flex flex-col min-h-screen bg-bg">
@@ -94,6 +134,7 @@ export default function DailyEntryScreen() {
                   expandedCustomerId === customer.id ? null : customer.id
                 )
               }
+              onLongPress={handleLongPress}
             />
           ))
         )}
@@ -111,6 +152,26 @@ export default function DailyEntryScreen() {
       )}
 
       <BottomNav />
+
+      {/* Long Press Action Sheet */}
+      {actionSheetCustomer && (
+        <CustomerActionSheet
+          customerName={actionSheetCustomer.name}
+          onEdit={handleEdit}
+          onDelete={handleDeleteRequest}
+          onClose={() => setActionSheetCustomer(null)}
+        />
+      )}
+
+      {/* Delete Confirmation */}
+      {deleteTarget && (
+        <DeleteConfirmDialog
+          customerName={deleteTarget.name}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={handleDeleteConfirm}
+          loading={deleting}
+        />
+      )}
     </div>
   );
 }

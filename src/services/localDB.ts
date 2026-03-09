@@ -403,6 +403,24 @@ export async function getEntriesByCustomerMonth(
     .sort((a, b) => a.entry_date.localeCompare(b.entry_date));
 }
 
+export async function getEntriesByCustomerDateRange(
+  customerId: string,
+  startDate: string,
+  endDate: string
+): Promise<DailyEntry[]> {
+  const db = await getDB();
+  const all = await db.getAll('daily_entries');
+  return all
+    .filter(
+      (e) =>
+        e.customer_id === customerId &&
+        e.entry_date >= startDate &&
+        e.entry_date <= endDate &&
+        !e.is_draft
+    )
+    .sort((a, b) => a.entry_date.localeCompare(b.entry_date));
+}
+
 export async function getEntriesByMonth(yearMonth: string): Promise<DailyEntry[]> {
   const db = await getDB();
   const all = await db.getAll('daily_entries');

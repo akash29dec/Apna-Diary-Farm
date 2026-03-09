@@ -22,7 +22,7 @@ export default function DeleteConfirmDialog({
           Delete Customer?
         </h2>
         <p className="text-body text-text-secondary font-poppins">
-          Delete <strong>{customerName}</strong>? All entries will be removed. This cannot be undone.
+          Delete <strong>{customerName}</strong>? All their entries, payments, and records will be permanently removed. This cannot be undone.
         </p>
         <div className="flex gap-3">
           <button

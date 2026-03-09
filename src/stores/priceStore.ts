@@ -16,6 +16,7 @@ import {
   isSupabaseConfigured,
 } from '@/services/supabase';
 import { getISTDateString } from '@/utils/dateHelpers';
+import { applyRetroactivePriceUpdate } from '@/utils/pricing';
 
 interface PriceState {
   globalPrices: GlobalPrice[];
@@ -28,6 +29,12 @@ interface PriceState {
     paneerPrice: number | null,
     dahiPrice: number | null
   ) => Promise<void>;
+  applyPriceOverrideWithRetroactive: (
+    customerId: string,
+    milkPrice: number | null,
+    paneerPrice: number | null,
+    dahiPrice: number | null
+  ) => Promise<number>;
   getOverridesForCustomer: (customerId: string) => Promise<PriceOverride[]>;
 }
 
@@ -99,6 +106,16 @@ export const usePriceStore = create<PriceState>((set, get) => ({
         console.error('Failed to sync price override:', err);
       }
     }
+  },
+
+  applyPriceOverrideWithRetroactive: async (customerId, milkPrice, paneerPrice, dahiPrice) => {
+    // Step 1: Insert new price_override row (effective_from = today)
+    await get().savePriceOverride(customerId, milkPrice, paneerPrice, dahiPrice);
+
+    // Step 2: Retroactively update entries from today → end of current month
+    const updatedCount = await applyRetroactivePriceUpdate(customerId);
+
+    return updatedCount;
   },
 
   getOverridesForCustomer: async (customerId: string) => {

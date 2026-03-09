@@ -2,7 +2,7 @@
 // Customer Card Component
 // ========================================
 
-import { useMemo } from 'react';
+import { useMemo, useRef, useCallback } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { Customer, DailyEntry, EntryDraft } from '@/types';
 import EntryForm from '@/components/EntryForm';
@@ -13,6 +13,7 @@ interface CustomerCardProps {
   draft?: EntryDraft;
   isExpanded: boolean;
   onToggle: () => void;
+  onLongPress?: (customer: Customer) => void;
 }
 
 export default function CustomerCard({
@@ -21,7 +22,11 @@ export default function CustomerCard({
   draft,
   isExpanded,
   onToggle,
+  onLongPress,
 }: CustomerCardProps) {
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggered = useRef(false);
+
   const initials = useMemo(() => {
     const parts = customer.name.trim().split(/\s+/);
     if (parts.length >= 2) {
@@ -41,12 +46,43 @@ export default function CustomerCard({
     ? 'text-accent-green'
     : 'text-text-secondary';
 
+  const startLongPress = useCallback(() => {
+    longPressTriggered.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      if (onLongPress) {
+        onLongPress(customer);
+      }
+    }, 500);
+  }, [customer, onLongPress]);
+
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const handleClick = useCallback(() => {
+    if (longPressTriggered.current) {
+      longPressTriggered.current = false;
+      return;
+    }
+    onToggle();
+  }, [onToggle]);
+
   return (
     <div className="mx-4 mb-3">
       {/* Collapsed Card */}
       <button
-        onClick={onToggle}
-        className={`w-full flex items-center gap-3 p-4 rounded-2xl transition-all font-poppins ${
+        onClick={handleClick}
+        onMouseDown={startLongPress}
+        onMouseUp={cancelLongPress}
+        onMouseLeave={cancelLongPress}
+        onTouchStart={startLongPress}
+        onTouchEnd={cancelLongPress}
+        onTouchMove={cancelLongPress}
+        className={`w-full flex items-center gap-3 p-4 rounded-2xl transition-all font-poppins select-none ${
           isExpanded
             ? 'bg-primary-blue text-white rounded-b-none border-2 border-primary-blue'
             : hasSavedEntry
@@ -54,7 +90,7 @@ export default function CustomerCard({
             : 'bg-surface border-2 border-border shadow-sm hover:border-primary-blue/50'
         }`}
         aria-expanded={isExpanded}
-        aria-label={`${customer.name} - ${statusText}. Tap to ${isExpanded ? 'collapse' : 'expand'}`}
+        aria-label={`${customer.name} - ${statusText}. Tap to ${isExpanded ? 'collapse' : 'expand'}. Long press for options.`}
       >
         {/* Avatar */}
         <div

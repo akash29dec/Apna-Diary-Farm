@@ -2,8 +2,10 @@
 // Pricing Logic
 // ========================================
 
-import { getActiveGlobalPrice, getCustomerPriceOverride } from '@/services/localDB';
-import type { ResolvedPrices, DailyEntry } from '@/types';
+import { getActiveGlobalPrice, getCustomerPriceOverride, getEntriesByCustomerDateRange, saveEntry, saveAuditLog } from '@/services/localDB';
+import { upsertDailyEntry, insertAuditLog, isSupabaseConfigured } from '@/services/supabase';
+import type { ResolvedPrices, DailyEntry, AuditLog } from '@/types';
+import { getISTDateString } from '@/utils/dateHelpers';
 
 /**
  * Resolve the effective prices for a customer on a given date.
@@ -60,4 +62,108 @@ export function calculateEntryTotal(entry: Pick<DailyEntry, 'milk_qty' | 'paneer
     entry.paneer_price_used,
     entry.dahi_price_used
   );
+}
+
+/**
+ * Apply a retroactive price update for the current month (from today onwards).
+ * Called after inserting a new price_override row.
+ * Returns the count of entries that were updated.
+ */
+export async function applyRetroactivePriceUpdate(
+  customerId: string
+): Promise<number> {
+  const today = getISTDateString();
+  const yearMonth = today.substring(0, 7);
+  const parts = yearMonth.split('-');
+  const y = parseInt(parts[0] ?? '2026', 10);
+  const m = parseInt(parts[1] ?? '1', 10);
+  const lastDay = new Date(y, m, 0).getDate();
+  const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
+
+  // Get entries from today through end of current month
+  const entries = await getEntriesByCustomerDateRange(customerId, today, monthEnd);
+
+  let updatedCount = 0;
+
+  for (const entry of entries) {
+    const oldPrices = {
+      milk_price_used: entry.milk_price_used,
+      paneer_price_used: entry.paneer_price_used,
+      dahi_price_used: entry.dahi_price_used,
+      total_amount: entry.total_amount,
+    };
+
+    // Resolve new prices (will pick up the just-inserted override)
+    const newPrices = await resolvePrice(customerId, entry.entry_date);
+
+    const newTotal = calculateTotal(
+      entry.milk_qty,
+      entry.paneer_qty,
+      entry.dahi_qty,
+      newPrices.milk_price,
+      newPrices.paneer_price,
+      newPrices.dahi_price
+    );
+
+    // Only update if prices actually changed
+    if (
+      entry.milk_price_used !== newPrices.milk_price ||
+      entry.paneer_price_used !== newPrices.paneer_price ||
+      entry.dahi_price_used !== newPrices.dahi_price
+    ) {
+      const updatedEntry: DailyEntry = {
+        ...entry,
+        milk_price_used: newPrices.milk_price,
+        paneer_price_used: newPrices.paneer_price,
+        dahi_price_used: newPrices.dahi_price,
+        total_amount: newTotal,
+        synced: false,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Save to IndexedDB
+      await saveEntry(updatedEntry);
+
+      // Log in audit_log
+      const auditLog: AuditLog = {
+        id: crypto.randomUUID(),
+        entry_id: entry.id,
+        customer_id: customerId,
+        changed_at: new Date().toISOString(),
+        changed_by: 'seller',
+        field_changed: 'price_override_applied',
+        old_value: oldPrices,
+        new_value: {
+          milk_price_used: newPrices.milk_price,
+          paneer_price_used: newPrices.paneer_price,
+          dahi_price_used: newPrices.dahi_price,
+          total_amount: newTotal,
+        },
+        reason: 'price_override_applied',
+      };
+      await saveAuditLog(auditLog);
+
+      // Sync to Supabase if online
+      if (navigator.onLine && isSupabaseConfigured()) {
+        try {
+          await upsertDailyEntry(updatedEntry);
+          await insertAuditLog({
+            entry_id: auditLog.entry_id,
+            customer_id: auditLog.customer_id,
+            changed_by: auditLog.changed_by,
+            field_changed: auditLog.field_changed,
+            old_value: auditLog.old_value,
+            new_value: auditLog.new_value,
+            reason: auditLog.reason,
+          });
+        } catch (err) {
+          console.error('Failed to sync retroactive price update:', err);
+        }
+      }
+
+      updatedCount++;
+    }
+  }
+
+  return updatedCount;
 }
