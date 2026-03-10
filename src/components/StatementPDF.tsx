@@ -226,7 +226,7 @@ export default function StatementPDF({
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Apna Diary | Fresh &amp; Pure Daily 🥛</Text>
+          <Text style={styles.title}>Apna Diary | Fresh &amp; Pure Daily</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoText}>Shop: {settings.seller_name || 'Apna Diary'}</Text>
             <Text style={styles.infoText}>Phone: {settings.seller_phone || '—'}</Text>
@@ -378,7 +378,7 @@ export default function StatementPDF({
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Thank you for choosing Apna Diary 🙏
+            Thank you for choosing Apna Diary
           </Text>
           <Text style={styles.footerText}>
             This is a computer-generated statement. No signature needed.

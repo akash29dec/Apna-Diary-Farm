@@ -17,20 +17,16 @@ export async function resolvePrice(
   customerId: string,
   entryDate: string
 ): Promise<ResolvedPrices> {
-  // Get global price for the date
-  const globalPrice = await getActiveGlobalPrice(entryDate);
-  if (!globalPrice) {
-    // Fallback defaults if no global price exists
-    return { milk_price: 18.0, paneer_price: 350.0, dahi_price: 60.0 };
-  }
-
-  // Check for customer-specific override
+  // Check for customer-specific override FIRST
   const override = await getCustomerPriceOverride(customerId, entryDate);
 
+  // Get global price for the date as fallback
+  const globalPrice = await getActiveGlobalPrice(entryDate);
+
   return {
-    milk_price: override?.milk_price ?? globalPrice.milk_price,
-    paneer_price: override?.paneer_price ?? globalPrice.paneer_price,
-    dahi_price: override?.dahi_price ?? globalPrice.dahi_price,
+    milk_price: override?.milk_price ?? globalPrice?.milk_price ?? 57.0,
+    paneer_price: override?.paneer_price ?? globalPrice?.paneer_price ?? 350.0,
+    dahi_price: override?.dahi_price ?? globalPrice?.dahi_price ?? 60.0,
   };
 }
 
@@ -106,7 +102,7 @@ export async function applyRetroactivePriceUpdate(
     // For each entry, resolve the effective price:
     // Use the new override price if set, otherwise fall back to the global price for that date
     const globalPrice = await getActiveGlobalPrice(entry.entry_date);
-    const effectiveMilk = newMilkPrice ?? globalPrice?.milk_price ?? 18.0;
+    const effectiveMilk = newMilkPrice ?? globalPrice?.milk_price ?? 57.0;
     const effectivePaneer = newPaneerPrice ?? globalPrice?.paneer_price ?? 350.0;
     const effectiveDahi = newDahiPrice ?? globalPrice?.dahi_price ?? 60.0;
 

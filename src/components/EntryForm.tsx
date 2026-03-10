@@ -36,7 +36,7 @@ export default function EntryForm({
     existingEntry ? existingEntry.dahi_qty > 0 : existingDraft?.dahi_enabled ?? false
   );
   const [dahiQty, setDahiQty] = useState(existingEntry?.dahi_qty ?? existingDraft?.dahi_qty ?? 0);
-  const [prices, setPrices] = useState({ milk_price: 18, paneer_price: 350, dahi_price: 60 });
+  const [prices, setPrices] = useState({ milk_price: 57, paneer_price: 350, dahi_price: 60 });
   const [saving, setSaving] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);

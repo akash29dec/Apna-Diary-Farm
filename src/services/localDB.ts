@@ -218,9 +218,12 @@ export async function markEntrySynced(id: string): Promise<void> {
 export async function getAllGlobalPrices(): Promise<GlobalPrice[]> {
   const db = await getDB();
   const all = await db.getAll('global_prices');
-  return all.sort(
-    (a, b) => new Date(b.effective_from).getTime() - new Date(a.effective_from).getTime()
-  );
+  return all.sort((a, b) => {
+    const dateDiff = new Date(b.effective_from).getTime() - new Date(a.effective_from).getTime();
+    if (dateDiff !== 0) return dateDiff;
+    // Tiebreaker: most recently created price wins when effective_from is the same
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
 }
 
 export async function getActiveGlobalPrice(date: string): Promise<GlobalPrice | undefined> {
@@ -228,8 +231,22 @@ export async function getActiveGlobalPrice(date: string): Promise<GlobalPrice | 
   const all = await db.getAll('global_prices');
   const sorted = all
     .filter((p) => p.effective_from <= date)
-    .sort((a, b) => new Date(b.effective_from).getTime() - new Date(a.effective_from).getTime());
-  return sorted[0];
+    .sort((a, b) => {
+      const dateDiff = new Date(b.effective_from).getTime() - new Date(a.effective_from).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+
+  if (sorted.length > 0) return sorted[0];
+
+  // Fallback: If no price exists on or before this date (e.g. past dates before app setup),
+  // return the remarkably earliest known price instead of undefined
+  all.sort((a, b) => {
+    const dateDiff = new Date(a.effective_from).getTime() - new Date(b.effective_from).getTime();
+    if (dateDiff !== 0) return dateDiff;
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  });
+  return all[0];
 }
 
 export async function saveGlobalPrice(price: GlobalPrice): Promise<void> {
@@ -247,8 +264,20 @@ export async function getCustomerPriceOverride(
   const all = await db.getAllFromIndex('price_overrides', 'by-customer', customerId);
   const sorted = all
     .filter((p) => p.effective_from <= date)
-    .sort((a, b) => new Date(b.effective_from).getTime() - new Date(a.effective_from).getTime());
-  return sorted[0];
+    .sort((a, b) => {
+      const dateDiff = new Date(b.effective_from).getTime() - new Date(a.effective_from).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+
+  if (sorted.length > 0) return sorted[0];
+
+  all.sort((a, b) => {
+    const dateDiff = new Date(a.effective_from).getTime() - new Date(b.effective_from).getTime();
+    if (dateDiff !== 0) return dateDiff;
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  });
+  return all[0];
 }
 
 export async function savePriceOverride(override: PriceOverride): Promise<void> {

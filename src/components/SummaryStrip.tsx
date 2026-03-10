@@ -12,13 +12,23 @@ export default function SummaryStrip() {
 
   const stats = useMemo(() => {
     const totalCustomers = customers.length;
-    const savedCustomerIds = new Set(
-      entries.filter((e) => !e.is_draft).map((e) => e.customer_id)
+
+    // 1. Create a Set of active customer IDs (customers array is already filtered to active only)
+    const activeCustomerIds = new Set(customers.map((c) => c.id));
+
+    // 2. Filter entries to only include those for currently active customers
+    const activeEntries = entries.filter(
+      (e) => !e.is_draft && activeCustomerIds.has(e.customer_id)
     );
-    const pending = totalCustomers - savedCustomerIds.size;
-    const todaysTotal = entries
-      .filter((e) => !e.is_draft)
-      .reduce((sum, e) => sum + e.total_amount, 0);
+
+    // 3. Recalculate based on active entries
+    const savedCustomerIds = new Set(activeEntries.map((e) => e.customer_id));
+
+    // Guard against negative pending numbers
+    const pending = Math.max(0, totalCustomers - savedCustomerIds.size);
+
+    // Today's total for active customers only
+    const todaysTotal = activeEntries.reduce((sum, e) => sum + e.total_amount, 0);
 
     return { totalCustomers, pending, todaysTotal };
   }, [customers, entries]);

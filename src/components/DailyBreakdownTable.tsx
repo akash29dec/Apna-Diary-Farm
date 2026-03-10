@@ -3,8 +3,9 @@
 // ========================================
 
 import { useState } from 'react';
-import { Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus, Copy } from 'lucide-react';
 import type { DailyEntry } from '@/types';
+import ReplicateEntryModal from '@/components/ReplicateEntryModal';
 import { useEntryStore } from '@/stores/entryStore';
 import { saveAuditLog } from '@/services/localDB';
 import { insertAuditLog } from '@/services/supabase';
@@ -29,6 +30,7 @@ export default function DailyBreakdownTable({
   const [editPaneer, setEditPaneer] = useState('0');
   const [editDahi, setEditDahi] = useState('0');
   const [saving, setSaving] = useState(false);
+  const [replicateSourceEntry, setReplicateSourceEntry] = useState<DailyEntry | null>(null);
 
   const { saveEntry } = useEntryStore();
 
@@ -139,7 +141,7 @@ export default function DailyBreakdownTable({
       </h3>
 
       {/* Table header */}
-      <div className="grid grid-cols-[60px_1fr_1fr_1fr_80px_40px] gap-1 px-4 py-2 bg-primary-light text-helper font-medium text-text-secondary font-poppins text-center">
+      <div className="grid grid-cols-[60px_1fr_1fr_1fr_80px_84px] gap-1 px-4 py-2 bg-primary-light text-helper font-medium text-text-secondary font-poppins text-center">
         <span className="text-left">Date</span>
         <span>Milk</span>
         <span>Paneer</span>
@@ -235,9 +237,8 @@ export default function DailyBreakdownTable({
           return (
             <div
               key={dateStr}
-              className={`grid grid-cols-[60px_1fr_1fr_1fr_80px_40px] gap-1 px-4 py-2.5 items-center text-center text-body font-poppins ${
-                isNoEntry || isZero ? 'bg-gray-50 text-text-secondary' : ''
-              }`}
+              className={`grid grid-cols-[60px_1fr_1fr_1fr_80px_84px] gap-1 px-4 py-2.5 items-center text-center text-body font-poppins ${isNoEntry || isZero ? 'bg-gray-50 text-text-secondary' : ''
+                }`}
             >
               <span className="text-left text-helper text-text-secondary">
                 {String(day).padStart(2, '0')} {dayOfWeek}
@@ -249,13 +250,22 @@ export default function DailyBreakdownTable({
                   <span>{entry.paneer_qty > 0 ? `${entry.paneer_qty}kg` : '—'}</span>
                   <span>{entry.dahi_qty > 0 ? `${entry.dahi_qty}kg` : '—'}</span>
                   <span className="font-medium">₹{entry.total_amount.toFixed(0)}</span>
-                  <button
-                    onClick={() => startEdit(dateStr, entry)}
-                    className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-primary-light"
-                    aria-label={`Edit entry for ${dateStr}`}
-                  >
-                    <Pencil className="w-4 h-4 text-primary-blue" />
-                  </button>
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      onClick={() => setReplicateSourceEntry(entry)}
+                      className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-primary-light min-w-touch min-h-touch"
+                      aria-label={`Replicate entry for ${dateStr}`}
+                    >
+                      <Copy className="w-5 h-5 text-primary-blue" />
+                    </button>
+                    <button
+                      onClick={() => startEdit(dateStr, entry)}
+                      className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-primary-light min-w-touch min-h-touch"
+                      aria-label={`Edit entry for ${dateStr}`}
+                    >
+                      <Pencil className="w-5 h-5 text-primary-blue" />
+                    </button>
+                  </div>
                 </>
               ) : isZero ? (
                 <>
@@ -263,13 +273,15 @@ export default function DailyBreakdownTable({
                   <span>—</span>
                   <span>—</span>
                   <span className="text-helper italic">No purchase</span>
-                  <button
-                    onClick={() => startEdit(dateStr, entry)}
-                    className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-primary-light"
-                    aria-label={`Edit entry for ${dateStr}`}
-                  >
-                    <Pencil className="w-4 h-4 text-text-secondary" />
-                  </button>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => startEdit(dateStr, entry)}
+                      className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-primary-light min-w-touch min-h-touch"
+                      aria-label={`Edit entry for ${dateStr}`}
+                    >
+                      <Pencil className="w-5 h-5 text-text-secondary" />
+                    </button>
+                  </div>
                 </>
               ) : (
                 <>
@@ -277,13 +289,15 @@ export default function DailyBreakdownTable({
                   <span>—</span>
                   <span>—</span>
                   <span className="text-helper italic">No entry</span>
-                  <button
-                    onClick={() => startEdit(dateStr)}
-                    className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-primary-light"
-                    aria-label={`Add entry for ${dateStr}`}
-                  >
-                    <Plus className="w-4 h-4 text-accent-green" />
-                  </button>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => startEdit(dateStr)}
+                      className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-primary-light min-w-touch min-h-touch"
+                      aria-label={`Add entry for ${dateStr}`}
+                    >
+                      <Plus className="w-5 h-5 text-accent-green" />
+                    </button>
+                  </div>
                 </>
               )}
             </div>
@@ -292,7 +306,7 @@ export default function DailyBreakdownTable({
       </div>
 
       {/* Monthly total footer */}
-      <div className="grid grid-cols-[60px_1fr_1fr_1fr_80px_40px] gap-1 px-4 py-3 bg-primary-light text-center font-poppins font-semibold border-t-2 border-primary-blue/20">
+      <div className="grid grid-cols-[60px_1fr_1fr_1fr_80px_84px] gap-1 px-4 py-3 bg-primary-light text-center font-poppins font-semibold border-t-2 border-primary-blue/20">
         <span className="text-left text-label text-text-primary">Total</span>
         <span className="text-body text-text-primary">
           {entries.reduce((s, e) => s + e.milk_qty, 0).toFixed(1)}L
@@ -308,6 +322,19 @@ export default function DailyBreakdownTable({
         </span>
         <span></span>
       </div>
+
+      {/* Replicate Modal */}
+      <ReplicateEntryModal
+        isOpen={!!replicateSourceEntry}
+        sourceEntry={replicateSourceEntry}
+        entries={entries}
+        yearMonth={yearMonth}
+        onClose={() => setReplicateSourceEntry(null)}
+        onSuccess={() => {
+          setReplicateSourceEntry(null);
+          onRefresh();
+        }}
+      />
     </div>
   );
 }

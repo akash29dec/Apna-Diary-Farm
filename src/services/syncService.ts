@@ -115,7 +115,7 @@ export async function initializeSeedData(): Promise<void> {
     const { saveGlobalPrice } = await import('@/services/localDB');
     await saveGlobalPrice({
       id: crypto.randomUUID(),
-      milk_price: 18.0,
+      milk_price: 57.0,
       paneer_price: 350.0,
       dahi_price: 60.0,
       effective_from: getISTDateString(),
