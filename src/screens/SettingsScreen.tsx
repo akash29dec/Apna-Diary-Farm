@@ -8,13 +8,13 @@ import {
   ArrowLeft,
   ChevronRight,
   Bell,
-  Smartphone,
   Database,
   Info,
   Download,
   FileText,
   Cloud,
   Upload,
+  Send,
 } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { usePriceStore } from '@/stores/priceStore';
@@ -25,6 +25,14 @@ import {
   scheduleReminderNotification,
   cancelScheduledReminder,
 } from '@/services/notificationService';
+import {
+  sendWhatsAppMessage,
+  buildTemplate1,
+  logWhatsAppSend,
+  isWhatsAppApiConfigured,
+} from '@/services/whatsappService';
+import { getWhatsAppLogsByDate } from '@/services/localDB';
+import type { WhatsappSendLog } from '@/types';
 
 export default function SettingsScreen() {
   const navigate = useNavigate();
@@ -35,10 +43,15 @@ export default function SettingsScreen() {
   const [sellerPhone, setSellerPhone] = useState('');
   const [reminderEnabled, setReminderEnabled] = useState(true);
   const [reminderTime, setReminderTime] = useState('08:00');
+  const [whatsappLogs, setWhatsappLogs] = useState<WhatsappSendLog[]>([]);
+  const [testingSend, setTestingSend] = useState(false);
 
   useEffect(() => {
     fetchSettings();
     fetchGlobalPrices();
+    // Load today's WhatsApp send logs
+    const todayStr = new Date().toISOString().split('T')[0] ?? '';
+    getWhatsAppLogsByDate(todayStr).then(setWhatsappLogs).catch(() => { /* non-critical */ });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -86,6 +99,48 @@ export default function SettingsScreen() {
       scheduleReminderNotification(time);
     }
   };
+
+  const handleSaveWhatsAppNumber = async () => {
+    if (sellerPhone.length !== 10) {
+      toast.error('Please enter a valid 10-digit number');
+      return;
+    }
+    await updateSettings({ seller_phone: sellerPhone });
+    toast.success('\u2705 WhatsApp number saved');
+  };
+
+  const handleTestWhatsApp = async () => {
+    if (!sellerPhone || sellerPhone.length !== 10) {
+      toast.error('Please save your WhatsApp number first');
+      return;
+    }
+    setTestingSend(true);
+    try {
+      const testPhone = `91${sellerPhone}`;
+      const message = buildTemplate1(1.5);
+      const result = await sendWhatsAppMessage(testPhone, message);
+      await logWhatsAppSend('test', new Date().toISOString().split('T')[0] ?? '', 'template1', result.success ? 'sent' : 'failed', 0, result.error);
+      if (result.method === 'api' && result.success) {
+        toast.success('\u2705 Test message sent to your number');
+      } else if (result.method === 'fallback') {
+        toast('\ud83d\udcf1 Tap Send in WhatsApp to complete test', { icon: '\ud83d\udcf1' });
+      } else {
+        toast.error('Failed to send test message');
+      }
+    } catch {
+      toast.error('Failed to send test message');
+    } finally {
+      setTestingSend(false);
+    }
+  };
+
+  const apiConnected = isWhatsAppApiConfigured();
+  const todaySent = whatsappLogs.filter(l => l.status === 'sent').length;
+  const todayFailed = whatsappLogs.filter(l => l.status === 'failed').length;
+  const todaySkipped = whatsappLogs.filter(l => l.status === 'skipped').length;
+  const lastLog = whatsappLogs.length > 0
+    ? whatsappLogs.sort((a, b) => (b.sent_at ?? '').localeCompare(a.sent_at ?? ''))[0]
+    : undefined;
 
   const latestPrice = globalPrices[0];
 
@@ -208,30 +263,97 @@ export default function SettingsScreen() {
           )}
         </section>
 
-        {/* WhatsApp (Coming Soon) */}
-        <section className="bg-surface rounded-2xl p-4 border border-border space-y-3 opacity-60">
+        {/* WhatsApp Notifications (Phase 3) */}
+        <section className="bg-surface rounded-2xl p-4 border border-border space-y-4">
           <h2 className="text-label font-semibold text-text-primary font-poppins flex items-center gap-2">
-            <Smartphone size={18} /> WhatsApp <span className="text-xs bg-border text-text-secondary px-2 py-0.5 rounded-full ml-2">Coming Soon</span>
+            📱 WhatsApp Notifications
           </h2>
-          <div className="flex items-center justify-between">
-            <span className="text-body text-text-secondary font-poppins">
-              WhatsApp sender number
+
+          {/* API Status Badge */}
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-helper font-medium font-poppins ${
+                apiConnected
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-amber-100 text-amber-700'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${
+                apiConnected ? 'bg-green-500' : 'bg-amber-500'
+              }`} />
+              {apiConnected ? 'API Connected' : 'Using WhatsApp Share Link (Manual)'}
             </span>
-            <span className="text-helper text-text-secondary font-poppins">Phase 3</span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-body text-text-secondary font-poppins">
-              Send time
+
+          {/* Seller WhatsApp Number */}
+          <div className="space-y-2">
+            <label className="text-helper text-text-secondary font-poppins">
+              Your WhatsApp Number
+            </label>
+            <div className="flex items-center gap-2">
+              <span className="h-14 px-3 flex items-center bg-gray-100 border-2 border-border rounded-xl text-body text-text-secondary font-poppins">
+                +91
+              </span>
+              <input
+                type="tel"
+                inputMode="numeric"
+                value={sellerPhone}
+                onChange={(e) => setSellerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="10-digit number"
+                className="flex-1 h-14 px-4 text-body text-text-primary bg-bg border-2 border-border rounded-xl font-poppins focus:outline-none focus:border-primary-blue transition-colors"
+                aria-label="Your WhatsApp number"
+              />
+            </div>
+            <button
+              onClick={handleSaveWhatsAppNumber}
+              className="w-full h-12 bg-primary-blue text-white font-semibold text-label rounded-xl font-poppins hover:bg-primary-blue/90 transition-colors min-h-touch"
+              aria-label="Save WhatsApp number"
+            >
+              Save WhatsApp Number
+            </button>
+          </div>
+
+          {/* Send Time (read-only) */}
+          <div className="flex items-center justify-between py-1">
+            <span className="text-body text-text-primary font-poppins">
+              Send Time
             </span>
-            <span className="text-helper text-text-secondary font-poppins">10:00 PM IST</span>
+            <span className="text-helper text-text-secondary font-poppins">
+              10:00 PM IST (via n8n)
+            </span>
           </div>
+
+          {/* Test WhatsApp Button */}
           <button
-            disabled
-            className="w-full h-12 border-2 border-border text-text-secondary font-semibold text-label rounded-xl font-poppins cursor-not-allowed min-h-touch"
-            aria-label="Test WhatsApp (coming soon)"
+            onClick={handleTestWhatsApp}
+            disabled={testingSend}
+            className="w-full h-12 border-2 border-accent-orange text-accent-orange font-semibold text-label rounded-xl font-poppins hover:bg-accent-orange/10 transition-colors min-h-touch flex items-center justify-center gap-2 disabled:opacity-50"
+            aria-label="Test WhatsApp"
           >
-            Test WhatsApp
+            <Send size={18} />
+            {testingSend ? 'Sending...' : 'Test WhatsApp'}
           </button>
+
+          {/* WhatsApp Status */}
+          <div className="bg-bg rounded-xl p-3 space-y-1">
+            <p className="text-helper font-medium text-text-secondary font-poppins">
+              WhatsApp Status
+            </p>
+            {whatsappLogs.length === 0 ? (
+              <p className="text-body text-text-secondary font-poppins">
+                No messages sent yet
+              </p>
+            ) : (
+              <>
+                <p className="text-helper text-text-secondary font-poppins">
+                  Last run: {lastLog?.sent_at ? new Date(lastLog.sent_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '—'}
+                </p>
+                <p className="text-body text-text-primary font-poppins">
+                  Today: <span className="text-green-600">{todaySent} sent</span> | <span className="text-red-500">{todayFailed} failed</span> | <span className="text-text-secondary">{todaySkipped} skipped</span>
+                </p>
+              </>
+            )}
+          </div>
         </section>
 
         {/* Data & Backup */}

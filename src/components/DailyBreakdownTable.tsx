@@ -6,9 +6,14 @@ import { useState } from 'react';
 import { Pencil, Plus } from 'lucide-react';
 import type { DailyEntry } from '@/types';
 import { useEntryStore } from '@/stores/entryStore';
-import { saveAuditLog } from '@/services/localDB';
+import { saveAuditLog, getCustomerById } from '@/services/localDB';
 import { insertAuditLog } from '@/services/supabase';
-import { getDaysInMonth } from 'date-fns';
+import {
+  sendWhatsAppMessage,
+  buildCorrectionMessage,
+  logWhatsAppSend,
+} from '@/services/whatsappService';
+import { getDaysInMonth, format } from 'date-fns';
 import toast from 'react-hot-toast';
 
 interface DailyBreakdownTableProps {
@@ -114,6 +119,36 @@ export default function DailyBreakdownTable({
       toast.success('Entry updated!');
       setEditingDate(null);
       onRefresh();
+
+      // Phase 3: Send correction WhatsApp for past entry edits
+      if (existingEntry) {
+        try {
+          const customer = await getCustomerById(customerId);
+          if (customer?.whatsapp_consent && customer.phone) {
+            const d = new Date(dateStr + 'T00:00:00');
+            const humanDate = format(d, 'd MMMM yyyy');
+            const msg = buildCorrectionMessage(humanDate);
+            const result = await sendWhatsAppMessage(customer.phone, msg);
+            await logWhatsAppSend(
+              customer.id,
+              dateStr,
+              'correction',
+              result.success ? 'sent' : 'failed',
+              0,
+              result.error
+            );
+            if (result.method === 'api' && result.success) {
+              toast.success(`✅ Correction message sent to ${customer.name}`);
+            } else if (result.method === 'fallback') {
+              toast(`📱 Tap Send in WhatsApp to notify ${customer.name} of the change`, { icon: '📱' });
+            } else {
+              toast('⚠️ Entry updated but WhatsApp notification failed', { icon: '⚠️' });
+            }
+          }
+        } catch {
+          // WhatsApp failure must never block entry save
+        }
+      }
     } catch {
       toast.error('Failed to save entry');
     } finally {

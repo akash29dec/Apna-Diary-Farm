@@ -16,7 +16,13 @@ import {
   deleteCustomerRemote,
   isSupabaseConfigured,
 } from '@/services/supabase';
+import {
+  sendWhatsAppMessage,
+  buildWelcomeMessage,
+  logWhatsAppSend,
+} from '@/services/whatsappService';
 import { formatPhone } from '@/utils/validation';
+import toast from 'react-hot-toast';
 
 interface CustomerState {
   customers: Customer[];
@@ -86,6 +92,32 @@ export const useCustomerStore = create<CustomerState>((set, get) => ({
 
     // Refresh store
     await get().fetchCustomers();
+
+    // Phase 3: Send welcome WhatsApp if consent is true
+    if (customer.whatsapp_consent && customer.phone) {
+      try {
+        const msg = buildWelcomeMessage();
+        const result = await sendWhatsAppMessage(customer.phone, msg);
+        const dateStr = now.split('T')[0] ?? '';
+        await logWhatsAppSend(
+          customer.id,
+          dateStr,
+          'welcome',
+          result.success ? 'sent' : 'failed',
+          0,
+          result.error
+        );
+        if (result.method === 'api' && result.success) {
+          toast.success(`✅ Welcome message sent to ${customer.name}`);
+        } else if (result.method === 'fallback') {
+          toast(`📱 Tap Send in WhatsApp to send welcome message to ${customer.name}`, { icon: '📱' });
+        }
+        // If failed: silent — do not block customer save with a WhatsApp error
+      } catch {
+        // WhatsApp failure must never block customer save
+      }
+    }
+
     return customer;
   },
 

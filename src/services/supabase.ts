@@ -11,6 +11,7 @@ import type {
   Settings,
   AuditLog,
   Payment,
+  WhatsappSendLog,
 } from '@/types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -230,6 +231,17 @@ export async function insertAuditLog(
   const sb = getSupabase();
   if (!sb) return;
   const { error } = await sb.from('audit_log').insert(log);
+  if (error) throw error;
+}
+
+// ---- WhatsApp Send Log (Phase 3) ----
+
+export async function insertWhatsAppLog(
+  log: WhatsappSendLog
+): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  const { error } = await sb.from('whatsapp_send_log').insert(log);
   if (error) throw error;
 }
 

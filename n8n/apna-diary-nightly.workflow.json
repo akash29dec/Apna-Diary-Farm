@@ -1,0 +1,399 @@
+{
+  "_comment": "Apna Diary — Nightly WhatsApp Notification Workflow for n8n. SETUP: 1) Set these n8n environment variables: SUPABASE_URL, SUPABASE_ANON_KEY, WHATSAPP_TOKEN, WHATSAPP_PHONE_ID. 2) Import this file: n8n → Workflows → Import from file. 3) Toggle workflow to Active after import.",
+  "name": "Apna Diary — Nightly WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 22,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "node-1-schedule",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300],
+      "notes": "Fires every day at 22:00 IST (Asia/Kolkata)"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "var-supabase-url",
+              "name": "SUPABASE_URL",
+              "value": "={{ $env.SUPABASE_URL }}",
+              "type": "string"
+            },
+            {
+              "id": "var-supabase-key",
+              "name": "SUPABASE_ANON_KEY",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}",
+              "type": "string"
+            },
+            {
+              "id": "var-wa-token",
+              "name": "WHATSAPP_TOKEN",
+              "value": "={{ $env.WHATSAPP_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "var-wa-phone",
+              "name": "WHATSAPP_PHONE_ID",
+              "value": "={{ $env.WHATSAPP_PHONE_ID }}",
+              "type": "string"
+            },
+            {
+              "id": "var-today",
+              "name": "TODAY",
+              "value": "={{ $now.setZone('Asia/Kolkata').toISODate() }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "node-2-set-vars",
+      "name": "Set Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.SUPABASE_URL }}/rest/v1/daily_entries",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "*,customers(name,phone,whatsapp_consent,is_active)"
+            },
+            {
+              "name": "entry_date",
+              "value": "eq.{{ $json.TODAY }}"
+            },
+            {
+              "name": "or",
+              "value": "(milk_qty.gt.0,paneer_qty.gt.0,dahi_qty.gt.0)"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $json.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.SUPABASE_ANON_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-3-fetch-entries",
+      "name": "Fetch Today Entries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "filter-consent",
+              "leftValue": "={{ $json.customers.whatsapp_consent }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "filter-active",
+              "leftValue": "={{ $json.customers.is_active }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "filter-phone",
+              "leftValue": "={{ $json.customers.phone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node-4-filter-customers",
+      "name": "Filter Valid Customers",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const item = $input.item.json;\n\nconst milkQty = item.milk_qty || 0;\nconst paneerQty = item.paneer_qty || 0;\nconst dahiQty = item.dahi_qty || 0;\n\nlet message = '';\nlet templateName = '';\nlet skip = false;\n\nif (milkQty > 0 && paneerQty === 0 && dahiQty === 0) {\n  // Template 1: Milk only\n  templateName = 'template1';\n  message = `Namaste 🙏\\nThank you for purchasing ${milkQty} litre milk today.\\nYour daily record has been updated in Apna Diary.\\n– Apna Diary | Fresh & Pure Daily 🥛✨`;\n} else if (milkQty > 0 && (paneerQty > 0 || dahiQty > 0)) {\n  // Template 2: Milk + paneer/dahi\n  templateName = 'template2';\n  message = `Namaste 🙏\\nToday's purchase details:\\n🥛 Milk: ${milkQty} litre\\n`;\n  if (paneerQty > 0) message += `🧀 Paneer: ${paneerQty} kg\\n`;\n  if (dahiQty > 0) message += `🥣 Dahi: ${dahiQty} kg\\n`;\n  message += `Thank you for trusting us ❤️\\n– Apna Diary | Fresh & Pure Daily 🧾✨`;\n} else if (milkQty === 0 && (paneerQty > 0 || dahiQty > 0)) {\n  // Template 3: Paneer/Dahi only\n  templateName = 'template3';\n  const items = [];\n  if (paneerQty > 0) items.push(`Paneer: ${paneerQty} kg`);\n  if (dahiQty > 0) items.push(`Dahi: ${dahiQty} kg`);\n  message = `Namaste 🙏\\nThank you for purchasing:\\n${items.join('\\n')}\\nYour entry is safely recorded in Apna Diary.\\n– Apna Diary | Fresh & Pure Daily 🧾✨`;\n} else {\n  skip = true;\n}\n\nreturn {\n  json: {\n    ...item,\n    phone: item.customers?.phone || '',\n    message,\n    templateName,\n    skip,\n    customer_id: item.customer_id,\n    entry_date: item.entry_date\n  }\n};"
+      },
+      "id": "node-5-build-message",
+      "name": "Build Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1130, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "filter-skip",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node-6-filter-skips",
+      "name": "Filter Out Skips",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1350, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v18.0/{{ $env.WHATSAPP_PHONE_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.WHATSAPP_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.phone }}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": {{ JSON.stringify($json.message) }} }\n}",
+        "options": {}
+      },
+      "id": "node-7-send-whatsapp",
+      "name": "Send WhatsApp Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1570, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/whatsapp_send_log",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"customer_id\": \"{{ $json.customer_id }}\",\n  \"send_date\": \"{{ $json.entry_date }}\",\n  \"sent_at\": \"{{ $now.toISO() }}\",\n  \"template_used\": \"{{ $json.templateName }}\",\n  \"status\": \"{{ $json.error ? 'failed' : 'sent' }}\",\n  \"retry_count\": {{ $json.retry_count || 0 }},\n  \"error_message\": {{ $json.error ? JSON.stringify($json.error) : 'null' }}\n}",
+        "options": {}
+      },
+      "id": "node-8-log-result",
+      "name": "Log Result to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1790, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-failed",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            },
+            {
+              "id": "check-retry",
+              "leftValue": "={{ ($json.retry_count || 0) }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node-9-retry-check",
+      "name": "Should Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2010, 300]
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "minutes"
+      },
+      "id": "node-10-wait",
+      "name": "Wait 5 Minutes",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2230, 200],
+      "webhookId": "retry-wait"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "inc-retry",
+              "name": "retry_count",
+              "value": "={{ ($json.retry_count || 0) + 1 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true
+      },
+      "id": "node-11-inc-retry",
+      "name": "Increment Retry Count",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2450, 200]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [{ "node": "Set Variables", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set Variables": {
+      "main": [
+        [{ "node": "Fetch Today Entries", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Today Entries": {
+      "main": [
+        [{ "node": "Filter Valid Customers", "type": "main", "index": 0 }]
+      ]
+    },
+    "Filter Valid Customers": {
+      "main": [
+        [{ "node": "Build Message", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Message": {
+      "main": [
+        [{ "node": "Filter Out Skips", "type": "main", "index": 0 }]
+      ]
+    },
+    "Filter Out Skips": {
+      "main": [
+        [{ "node": "Send WhatsApp Message", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send WhatsApp Message": {
+      "main": [
+        [{ "node": "Log Result to Supabase", "type": "main", "index": 0 }]
+      ]
+    },
+    "Log Result to Supabase": {
+      "main": [
+        [{ "node": "Should Retry?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Should Retry?": {
+      "main": [
+        [{ "node": "Wait 5 Minutes", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Wait 5 Minutes": {
+      "main": [
+        [{ "node": "Increment Retry Count", "type": "main", "index": 0 }]
+      ]
+    },
+    "Increment Retry Count": {
+      "main": [
+        [{ "node": "Send WhatsApp Message", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata"
+  },
+  "tags": [
+    {
+      "name": "apna-diary"
+    }
+  ]
+}
