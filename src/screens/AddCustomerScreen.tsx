@@ -8,6 +8,7 @@ import CustomerForm from '@/components/CustomerForm';
 import { useCustomerStore } from '@/stores/customerStore';
 import { usePriceStore } from '@/stores/priceStore';
 import type { CustomerFormValues } from '@/utils/validation';
+import { sendWelcomeMessage } from '@/services/whatsappService';
 import toast from 'react-hot-toast';
 
 export default function AddCustomerScreen() {
@@ -36,6 +37,11 @@ export default function AddCustomerScreen() {
         if (milkPrice !== null || paneerPrice !== null || dahiPrice !== null) {
           await savePriceOverride(customer.id, milkPrice, paneerPrice, dahiPrice);
         }
+      }
+
+      // Fire-and-forget WhatsApp welcome message
+      if (customer.whatsapp_consent) {
+        sendWelcomeMessage(customer);
       }
 
       toast.success(`✅ ${data.name} added successfully`);

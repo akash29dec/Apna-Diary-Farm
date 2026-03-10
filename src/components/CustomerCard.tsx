@@ -3,7 +3,7 @@
 // ========================================
 
 import { useMemo } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, MessageCircle } from 'lucide-react';
 import type { Customer, DailyEntry, EntryDraft } from '@/types';
 import EntryForm from '@/components/EntryForm';
 
@@ -83,6 +83,14 @@ export default function CustomerCard({
               <span className="inline-block w-2 h-2 rounded-full bg-primary-blue mr-1" title="Draft saved" />
             )}
             🥛 {statusText}
+            {hasSavedEntry && customer.whatsapp_consent && entry.total_amount > 0 && (
+              <MessageCircle
+                size={16}
+                className="ml-1 shrink-0"
+                style={{ color: '#25D366' }}
+                aria-label="WhatsApp receipt sent"
+              />
+            )}
           </p>
         </div>
 

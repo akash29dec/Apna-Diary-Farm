@@ -109,6 +109,7 @@ export interface WhatsappSendLog {
   status: 'sent' | 'failed' | 'skipped';
   retry_count: number;
   error_message: string | null;
+  message_type: string;
 }
 
 // ========================================

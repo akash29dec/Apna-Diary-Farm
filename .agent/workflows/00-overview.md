@@ -71,8 +71,9 @@ Routing             | React Router v6               | Standard, well-documented
 PDF Generation      | jsPDF + html2canvas           | Client-side, no server needed
 Date Handling       | date-fns + date-fns-tz        | Accurate IST timezone handling
 Notifications       | Web Push API + Service Worker | Local push on Android PWA
-WhatsApp (Phase 3)  | n8n (self-hosted free OR      | Free automation, webhook triggers,
-                    | n8n.cloud free trial)         | WhatsApp Business API integration
+WhatsApp (Phase 3)  | Meta WhatsApp Business        | Official API, ₹1500/month
+Budget              | Cloud API + Supabase          | ~8000–10000 messages/month,
+Security            | Edge Functions                | no n8n, server-side token 
 Hosting             | Vercel (free tier)            | HTTPS auto, 100GB bandwidth/month,
                     |                               | CI/CD from GitHub
 Icons               | Lucide React                  | Clean, consistent icon set
@@ -116,14 +117,15 @@ PHASE 2 (Summary & PDF):
   - Past dues (carry-forward from previous months)
 
 PHASE 3 (WhatsApp Automation — Second-to-Last):
-  - Seller's WhatsApp number entry in Settings
-  - n8n webhook-triggered WhatsApp message at 22:00 IST daily
-  - 3 message templates (auto-selected by purchase type)
-  - Send only if purchase exists that day
-  - Send correction message on past entry edit
-  - WhatsApp consent displayed on customer add
-  - Retry logic + send log in Supabase
-  - Consent welcome message on first save
+  - Official Meta WhatsApp Business Cloud API (no n8n)
+  - Supabase Edge Function as secure server-side sender
+  - Instant send on Save Entry (daily receipt)
+  - Instant send on Add Customer (welcome message)
+  - Instant send on Edit past entry (correction notification)
+  - Send PDF statement summary via WhatsApp from monthly detail screen
+  - WhatsApp consent flow on customer add
+  - Send log in Supabase (whatsapp_send_log)
+  - Settings: API connection test + send log viewer
 
 PHASE 4 (Multi-User + iOS — Last Phase):
   - Google Auth login via Supabase Auth

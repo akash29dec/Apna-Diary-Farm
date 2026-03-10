@@ -13,11 +13,10 @@ import type {
   SyncQueueItem,
   Payment,
   AuditLog,
-  WhatsappSendLog,
 } from '@/types';
 
 const DB_NAME = 'apna-diary-db';
-const DB_VERSION = 3;
+const DB_VERSION = 2;
 
 interface ApnaDiaryDB {
   customers: {
@@ -78,14 +77,6 @@ interface ApnaDiaryDB {
     value: AuditLog;
     indexes: {
       'by-entry': string;
-    };
-  };
-  whatsapp_send_log: {
-    key: string;
-    value: WhatsappSendLog;
-    indexes: {
-      'by-customer': string;
-      'by-date': string;
     };
   };
 }
@@ -152,13 +143,6 @@ export async function getDB(): Promise<IDBPDatabase<ApnaDiaryDB>> {
       if (!db.objectStoreNames.contains('audit_log')) {
         const auditStore = db.createObjectStore('audit_log', { keyPath: 'id' });
         auditStore.createIndex('by-entry', 'entry_id');
-      }
-
-      // WhatsApp send log store (Phase 3)
-      if (!db.objectStoreNames.contains('whatsapp_send_log')) {
-        const waStore = db.createObjectStore('whatsapp_send_log', { keyPath: 'id' });
-        waStore.createIndex('by-customer', 'customer_id');
-        waStore.createIndex('by-date', 'send_date');
       }
     },
   });
@@ -456,16 +440,4 @@ export async function bulkSavePayments(payments: Payment[]): Promise<void> {
     await tx.store.put(payment);
   }
   await tx.done;
-}
-
-// ---- WhatsApp Send Log (Phase 3) ----
-
-export async function saveWhatsAppLog(log: WhatsappSendLog): Promise<void> {
-  const db = await getDB();
-  await db.put('whatsapp_send_log', log);
-}
-
-export async function getWhatsAppLogsByDate(date: string): Promise<WhatsappSendLog[]> {
-  const db = await getDB();
-  return db.getAllFromIndex('whatsapp_send_log', 'by-date', date);
 }

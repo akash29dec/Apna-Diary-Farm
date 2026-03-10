@@ -5,7 +5,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, Download, Share2, Loader2 } from 'lucide-react';
+import { ArrowLeft, FileText, Download, Share2, Loader2, MessageCircle } from 'lucide-react';
 import { pdf } from '@react-pdf/renderer';
 import toast from 'react-hot-toast';
 import type { DailyEntry, CustomerMonthSummary, Settings } from '@/types';
@@ -20,6 +20,8 @@ import DailyBreakdownTable from '@/components/DailyBreakdownTable';
 import PaymentSection from '@/components/PaymentSection';
 import PastDuesSection from '@/components/PastDuesSection';
 import StatementPDF from '@/components/StatementPDF';
+import WhatsAppConfirmSheet from '@/components/WhatsAppConfirmSheet';
+import { sendPDFStatement, formatMonthForWhatsApp } from '@/services/whatsappService';
 import { getISTDateString } from '@/utils/dateHelpers';
 
 export default function CustomerMonthlyDetailScreen() {
@@ -34,6 +36,8 @@ export default function CustomerMonthlyDetailScreen() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
   const [generatingPDF, setGeneratingPDF] = useState(false);
+  const [whatsappSheetOpen, setWhatsappSheetOpen] = useState(false);
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
 
   const { payments, fetchPayments } = usePaymentStore();
 
@@ -149,6 +153,24 @@ export default function CustomerMonthlyDetailScreen() {
     }
   };
 
+  const handleSendWhatsApp = async () => {
+    if (!summary) return;
+    setSendingWhatsApp(true);
+    try {
+      const result = await sendPDFStatement(summary.customer, summary, month);
+      if (result.success) {
+        toast.success(`✅ Statement sent to ${summary.customer.name} via WhatsApp`);
+      } else {
+        toast.error('⚠️ Could not send WhatsApp message. Check connection.');
+      }
+    } catch {
+      toast.error('⚠️ Could not send WhatsApp message. Check connection.');
+    } finally {
+      setSendingWhatsApp(false);
+      setWhatsappSheetOpen(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
@@ -253,7 +275,31 @@ export default function CustomerMonthlyDetailScreen() {
               📤 SHARE PDF
             </button>
           )}
+
+          {/* WhatsApp Send Button */}
+          {summary.customer.whatsapp_consent && (
+            <button
+              onClick={() => setWhatsappSheetOpen(true)}
+              className="w-full h-14 text-white font-bold text-body rounded-xl font-poppins flex items-center justify-center gap-2 transition-colors hover:opacity-90 min-h-touch"
+              style={{ backgroundColor: '#25D366' }}
+              aria-label="Send monthly statement via WhatsApp"
+            >
+              <MessageCircle className="w-5 h-5" />
+              📱 SEND VIA WHATSAPP
+            </button>
+          )}
         </div>
+
+        {/* WhatsApp Confirmation Sheet */}
+        <WhatsAppConfirmSheet
+          isOpen={whatsappSheetOpen}
+          sending={sendingWhatsApp}
+          customerName={summary.customer.name}
+          customerPhone={summary.customer.phone}
+          monthLabel={formatMonthForWhatsApp(month)}
+          onConfirm={handleSendWhatsApp}
+          onCancel={() => setWhatsappSheetOpen(false)}
+        />
       </div>
     </div>
   );

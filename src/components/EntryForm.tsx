@@ -10,6 +10,7 @@ import type { Customer, DailyEntry, EntryDraft } from '@/types';
 import { resolvePrice } from '@/utils/pricing';
 import { calculateTotal } from '@/utils/pricing';
 import { validateEntry } from '@/utils/validation';
+import { sendDailyReceipt } from '@/services/whatsappService';
 import toast from 'react-hot-toast';
 
 interface EntryFormProps {
@@ -90,7 +91,7 @@ export default function EntryForm({
     setSaving(true);
 
     try {
-      await saveEntry({
+      const savedEntry = await saveEntry({
         customerId: customer.id,
         milkQty,
         paneerQty: paneerEnabled ? paneerQty : 0,
@@ -98,6 +99,9 @@ export default function EntryForm({
         existingEntryId: existingEntry?.id,
       });
       toast.success(`✅ Entry saved for ${customer.name}`);
+
+      // Fire-and-forget WhatsApp daily receipt
+      sendDailyReceipt(savedEntry, customer);
     } catch {
       toast.error('Failed to save entry');
     } finally {
